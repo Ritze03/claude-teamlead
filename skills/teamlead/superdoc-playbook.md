@@ -8,25 +8,33 @@ on this line — see Part 6 for exactly where that number gets stamped into the 
 repo.
 
 You are a dispatched worker building, auditing, or repairing a project's
-self-maintaining `docs/` system. Your cwd is the **target repo**, not this skill's
+self-maintaining docs system. Your cwd is the **target repo**, not this skill's
 directory — every path below that starts with `/home/mo/.claude/skills/teamlead/` is
 this skill's own file and must be referenced by that absolute path (it will not
-resolve relative to your cwd). Every path that starts with `docs/` or `CLAUDE.md` is
+resolve relative to your cwd). Every path that starts with `<DOCROOT>/` or `CLAUDE.md` is
 relative to the target repo root, i.e. your cwd.
 
+**`<DOCROOT>` — the doc-root folder for this run.** The dispatching brief tells you the
+value; it is **`superdoc/` by default (the recommended choice)**, or **`docs/`** if the
+user picked that instead. Wherever this playbook writes `<DOCROOT>/`, substitute the
+folder you were given — every path, skeleton, and `CLAUDE.md` `@`-ref. The folder name
+is the *only* thing that varies; the structure inside it, the `superdoc:` marker, and
+every rule below are identical for both. (The two `.../ForzaTelemetryV3/docs/...`
+example paths are the reference repo's real folder — leave those as `docs/`.)
+
 This file is doc-writing knowledge only — how to shape, write, and verify the
-`docs/` system. It does not restate orchestration rules; those live in the
+`<DOCROOT>/` tree. It does not restate orchestration rules; those live in the
 dispatching agent's own doctrine.
 
-## Part 0 — Do you even need `docs/`?
+## Part 0 — Do you even need `<DOCROOT>/`?
 
 Check before building anything: if the whole project fits in one good `CLAUDE.md` —
 a handful of project-overview bullets is genuinely enough for an agent to orient —
-**stop here**. Write those bullets into `CLAUDE.md` and don't scaffold `docs/`. A thin
-`docs/` with one paragraph per page is worse than no `docs/` at all — it invites trust
+**stop here**. Write those bullets into `CLAUDE.md` and don't scaffold `<DOCROOT>/`. A thin
+`<DOCROOT>/` with one paragraph per page is worse than no `<DOCROOT>/` at all — it invites trust
 nobody's going to keep earning.
 
-Re-check this on AUDIT too: if `docs/` turns out to be scaffolding a project that never
+Re-check this on AUDIT too: if `<DOCROOT>/` turns out to be scaffolding a project that never
 grew into it, say so in the report and propose collapsing it back into `CLAUDE.md`.
 
 ## Part 1 — Detect project shape
@@ -35,7 +43,7 @@ Read the manifest/entry points before writing anything: package manifest
 (`Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, …), the top-level source
 layout, and whichever of `main`/`index`/`lib`/`cmd` exists. Decide two things from
 this: **does it have a UI** (a rendered window, page, or TUI — decides whether
-`docs/ui/STYLING-GUIDE.md` gets created at all), and **which shape row below** it is
+`<DOCROOT>/ui/STYLING-GUIDE.md` gets created at all), and **which shape row below** it is
 (decides the capability-page noun, the data-flow spine, and the symbol convention used
 throughout).
 
@@ -65,15 +73,15 @@ ForzaTelemetryV3's `docs/`:
 
 | Path | Required? | Holds |
 | --- | --- | --- |
-| `docs/architecture/overview.md` | Always (the floor) | The hub: big picture, module map, "where to look for X". First page anyone reads. |
-| `docs/architecture/*.md` | Once `overview.md` would get too long for one topic | Deep dives it links out to instead of duplicating (networking, state, etc.). |
-| `docs/meta/TERMINOLOGY.md` | Once real project vocabulary exists | Glossary + the "ask before acting on an undefined term" rule. Never created empty. |
-| `docs/ui/STYLING-GUIDE.md` | Only if the project has a UI | Layout/control rules with runnable snippets and explicit "do NOT" bans. |
-| `docs/<capability>/*.md` | One per **real** capability (YAGNI) | The noun from Part 1's shape row — `features/`, `commands/`, `endpoints/`, … One page per capability, not one page per file. |
-| `docs/<capability>/<topic>-design.md` | Only for big decisions | Dated design-spec doc: goal, non-goals, rationale, `Status:` marker. |
-| `docs/claude-instructions/documentation.md` | Always | Verbatim-installed discipline file (Part 7). |
-| `docs/claude-instructions/documentation-version-policy.md` | Always | Verbatim-installed version-policy variant (Part 7). |
-| `docs/README.md` | Only once `docs/` outgrows the overview (~5+ pages) or it's a monorepo | Table-of-contents, one section per subfolder. Below that threshold, `CLAUDE.md`'s reference list plus `overview.md`'s module map already are the index. |
+| `<DOCROOT>/architecture/overview.md` | Always (the floor) | The hub: big picture, module map, "where to look for X". First page anyone reads. |
+| `<DOCROOT>/architecture/*.md` | Once `overview.md` would get too long for one topic | Deep dives it links out to instead of duplicating (networking, state, etc.). |
+| `<DOCROOT>/meta/TERMINOLOGY.md` | Once real project vocabulary exists | Glossary + the "ask before acting on an undefined term" rule. Never created empty. |
+| `<DOCROOT>/ui/STYLING-GUIDE.md` | Only if the project has a UI | Layout/control rules with runnable snippets and explicit "do NOT" bans. |
+| `<DOCROOT>/<capability>/*.md` | One per **real** capability (YAGNI) | The noun from Part 1's shape row — `features/`, `commands/`, `endpoints/`, … One page per capability, not one page per file. |
+| `<DOCROOT>/<capability>/<topic>-design.md` | Only for big decisions | Dated design-spec doc: goal, non-goals, rationale, `Status:` marker. |
+| `<DOCROOT>/claude-instructions/documentation.md` | Always | Verbatim-installed discipline file (Part 7). |
+| `<DOCROOT>/claude-instructions/documentation-version-policy.md` | Always | Verbatim-installed version-policy variant (Part 7). |
+| `<DOCROOT>/README.md` | Only once `<DOCROOT>/` outgrows the overview (~5+ pages) or it's a monorepo | Table-of-contents, one section per subfolder. Below that threshold, `CLAUDE.md`'s reference list plus `overview.md`'s module map already are the index. |
 
 A page earns its place with a non-obvious *why* or a multi-file "where do I even
 look" answer; otherwise a module-map row in `overview.md` already covers it. Don't
@@ -84,7 +92,7 @@ create a capability folder for something with no real, working capability yet.
 Reproduce these skeletons exactly (headings + what goes under each); fill with the
 project's real content, don't invent sections.
 
-### `docs/architecture/overview.md`
+### `<DOCROOT>/architecture/overview.md`
 
 ```markdown
 # Architecture Overview
@@ -140,7 +148,7 @@ output.rs:render / respond
 are for navigation once you already know the shape of the story, not the whole story
 themselves.
 
-### `docs/meta/TERMINOLOGY.md`
+### `<DOCROOT>/meta/TERMINOLOGY.md`
 
 ```markdown
 # Terminology
@@ -161,7 +169,7 @@ amend the entry here.
 Never create this file empty just to have it exist — it earns its place the first time
 a real project-specific term needs defining.
 
-### `docs/ui/STYLING-GUIDE.md` (only if the project has a UI)
+### `<DOCROOT>/ui/STYLING-GUIDE.md` (only if the project has a UI)
 
 ```markdown
 # Styling Guide
@@ -195,7 +203,7 @@ page is that an agent can copy-paste the correct pattern instead of reinventing 
 Every ban should be explicit and imperative ("do NOT ...") with the one-line reason,
 mirroring how a hard-won inconsistency actually got fixed.
 
-### `docs/<capability>/<name>.md` (one per real capability)
+### `<DOCROOT>/<capability>/<name>.md` (one per real capability)
 
 ```markdown
 # <Capability name> — <one-line tagline>
@@ -230,7 +238,7 @@ docs this feature touches or depends on.
 Skip `## Options` entirely if the capability has no configuration — an empty table is
 worse than no heading. One page per capability, not one page per file that touches it.
 
-### Dated design-spec doc (`docs/<capability>/<topic>-design.md`)
+### Dated design-spec doc (`<DOCROOT>/<capability>/<topic>-design.md`)
 
 Only for decisions big enough that the *why* won't fit as an inline note — genuine
 architecture trade-offs, a path not taken and why, a decision revisited later.
@@ -262,7 +270,7 @@ The `Status:` marker is load-bearing: AUDIT checks it, and a `Superseded` doc sh
 say what superseded it and link there rather than being deleted — it's still the
 record of why the old approach was tried.
 
-### `docs/README.md` (only past the threshold in Part 2)
+### `<DOCROOT>/README.md` (only past the threshold in Part 2)
 
 ```markdown
 # <Project> — Documentation
@@ -323,32 +331,32 @@ stay fixed.
 ## Docs: read before you touch, update after you change
 
 Full discipline — what to read, when to update, how to record the *why* — lives in the
-always-loaded `docs/claude-instructions/documentation.md` below; this is a pointer, not
+always-loaded `<DOCROOT>/claude-instructions/documentation.md` below; this is a pointer, not
 a restatement.
 
 Reference docs — plain links, read the one relevant to your task on demand:
 
-- **`docs/architecture/overview.md`** — codebase navigation map (module map, data flow,
+- **`<DOCROOT>/architecture/overview.md`** — codebase navigation map (module map, data flow,
   "where to look for X"). **Start here to navigate the code.**
-- Per-<capability> behaviour — `docs/<capability>/`
-- Styling rules — `docs/ui/STYLING-GUIDE.md` (only if this project has a UI)
-- `docs/README.md` — the docs table of contents (only once it exists, see Part 2)
+- Per-<capability> behaviour — `<DOCROOT>/<capability>/`
+- Styling rules — `<DOCROOT>/ui/STYLING-GUIDE.md` (only if this project has a UI)
+- `<DOCROOT>/README.md` — the docs table of contents (only once it exists, see Part 2)
 
 ## Always in context (force-loaded, mandatory)
 
 `@` is reserved for the must-always-know set. Everything above is a plain link: an
 optional, on-demand read.
 
-- **Terminology** — @docs/meta/TERMINOLOGY.md — project vocabulary; use these meanings,
+- **Terminology** — @<DOCROOT>/meta/TERMINOLOGY.md — project vocabulary; use these meanings,
   ask before acting on an undefined term, and keep it current.
-- **Documentation discipline** — @docs/claude-instructions/documentation.md — read
+- **Documentation discipline** — @<DOCROOT>/claude-instructions/documentation.md — read
   before you touch, update after you change, record design rationale (the *why*).
-- **Version policy** — @docs/claude-instructions/documentation-version-policy.md — how
+- **Version policy** — @<DOCROOT>/claude-instructions/documentation-version-policy.md — how
   this project bumps doc/version markers.
-- One `@` line per file under `docs/claude-instructions/` this project has — force-load
+- One `@` line per file under `<DOCROOT>/claude-instructions/` this project has — force-load
   all of them, nothing else.
 
-Path base: `CLAUDE.md` uses repo-root-relative paths (`@docs/...`, `` `docs/...` ``);
+Path base: `CLAUDE.md` uses repo-root-relative paths (`@<DOCROOT>/...`, `` `<DOCROOT>/...` ``);
 links *inside* docs are docs-relative. Precedence: `CLAUDE.md` is authoritative for
 rules, docs are the reference — reconcile to `CLAUDE.md` on conflict. `@`-budget:
 force-load a file only if its absence would let the agent do the wrong thing on *any*
@@ -356,8 +364,8 @@ task.
 <!-- superdoc:end -->
 ```
 
-The `@`-force-load set is **exactly** `docs/meta/TERMINOLOGY.md` plus every file under
-`docs/claude-instructions/` — nothing else, ever. Every other doc (`overview.md`,
+The `@`-force-load set is **exactly** `<DOCROOT>/meta/TERMINOLOGY.md` plus every file under
+`<DOCROOT>/claude-instructions/` — nothing else, ever. Every other doc (`overview.md`,
 every capability page, `STYLING-GUIDE.md`, `README.md`) is a plain on-demand link.
 Force-loading spends context budget on every session; keep the set small on purpose.
 
@@ -374,7 +382,7 @@ Never duplicate the `@` block. Preserve existing project-overview bullets and an
 project-overview stub — project name, one-line what-it-is, stack, key conventions, a
 few bullets — plus the block above. Not a competing template; the stub is scaffolding
 for the human to flesh out. Keep the whole file thin, entry-map style — detail lives in
-`docs/`, `CLAUDE.md` just points into it (see
+`<DOCROOT>/`, `CLAUDE.md` just points into it (see
 `/home/mo/Documents/Programming/ForzaTelemetryV3/CLAUDE.md` for the shape to match:
 short project overview, a "Docs" pointer section, then the `@` block, nothing more).
 
@@ -388,13 +396,13 @@ inside the target repo's `CLAUDE.md` —
 ```
 
 The `vN` there is the installed contract version. State detection reads it directly:
-`docs/` folder present **and** this marker found in `CLAUDE.md` → an existing
-installation (HEALTH-CHECK/AUDIT territory); no `docs/` and no marker → FRESH; `docs/`
+`<DOCROOT>/` folder present **and** this marker found in `CLAUDE.md` → an existing
+installation (HEALTH-CHECK/AUDIT territory); no `<DOCROOT>/` and no marker → FRESH; `<DOCROOT>/`
 present **without** the marker → likely hand-written docs, confirm before regenerating
 (the dispatcher's Step-1 guard). Version compare
 for an upgrade offer is: installed `vN` on this line vs. the `superdoc: v2` on line 3
 of this playbook file — older installed version → offer the upgrade, never silently
-rewrite it. Do not also stamp a marker under `docs/` itself; the `CLAUDE.md` line is
+rewrite it. Do not also stamp a marker under `<DOCROOT>/` itself; the `CLAUDE.md` line is
 the single source of truth for the installed version.
 
 ## Part 7 — Verbatim-install files
@@ -405,10 +413,10 @@ memory drifts.
 
 ```bash
 cp /home/mo/.claude/skills/teamlead/superdoc-assets/documentation.md \
-   docs/claude-instructions/documentation.md
+   <DOCROOT>/claude-instructions/documentation.md
 
 cp /home/mo/.claude/skills/teamlead/superdoc-assets/version-policy-<variant>.md \
-   docs/claude-instructions/documentation-version-policy.md
+   <DOCROOT>/claude-instructions/documentation-version-policy.md
 ```
 
 Where `<variant>` is one of `date-based`, `auto-bump`, `manual` — whichever version
@@ -422,14 +430,14 @@ Before you report anything — FRESH, AUDIT, or REPAIR — confirm every box bel
 report a doc set you haven't verified; a red box means fix it or drop the claim, then
 re-check.
 
-- [ ] Every `path:symbol` written anywhere in `docs/` resolves: the path exists and the
+- [ ] Every `path:symbol` written anywhere in `<DOCROOT>/` resolves: the path exists and the
       symbol is actually in it (grep it, don't eyeball it).
-- [ ] Every relative link written anywhere in `docs/` resolves to a file that exists.
+- [ ] Every relative link written anywhere in `<DOCROOT>/` resolves to a file that exists.
 - [ ] Every `@`-ref in `CLAUDE.md` points to a file that **exists on disk** — this is
       the single most common failure mode (a force-loaded reference that 404s breaks
       every session's context, silently). Check each one by hand.
-- [ ] The `@`-set in `CLAUDE.md` is exactly `docs/meta/TERMINOLOGY.md` plus everything
-      under `docs/claude-instructions/` — nothing more.
+- [ ] The `@`-set in `CLAUDE.md` is exactly `<DOCROOT>/meta/TERMINOLOGY.md` plus everything
+      under `<DOCROOT>/claude-instructions/` — nothing more.
 - [ ] Every capability page written has at least one inline `*Why:*` note, or
       genuinely has no non-obvious decision to record (don't force one).
 - [ ] No claim in any doc contradicts the code as it currently reads (re-check the
@@ -441,10 +449,10 @@ re-check.
 
 ## Part 9 — AUDIT (report-only)
 
-Idempotent, re-runnable over an existing `docs/` — same rules as FRESH, just verifying
+Idempotent, re-runnable over an existing `<DOCROOT>/` — same rules as FRESH, just verifying
 instead of creating. **Do not write to any file in this mode.**
 
-- Run the full Part 8 gate against the existing `docs/` and `CLAUDE.md`.
+- Run the full Part 8 gate against the existing `<DOCROOT>/` and `CLAUDE.md`.
 - Grep every referenced `path`/`symbol` and every relative link; list what doesn't
   resolve.
 - List code capabilities/modules with no corresponding doc page.
@@ -452,7 +460,7 @@ instead of creating. **Do not write to any file in this mode.**
 - Check the installed `superdoc:vN` marker (Part 6) against this playbook's version;
   flag if older.
 - Flag any `@`-ref outside the Part 5 allowed set, and any `@`-ref that's broken.
-- Re-check Part 0: if `docs/` never grew past scaffolding, say so and propose
+- Re-check Part 0: if `<DOCROOT>/` never grew past scaffolding, say so and propose
   collapsing it back into `CLAUDE.md`.
 
 Report every finding as a concrete, project-specific item (file + line + what's wrong),
@@ -472,10 +480,10 @@ everything AUDIT found" on your own initiative.
 - Re-run the full Part 8 gate after repairing before you report done.
 - Keep edits to shared pages (module-map rows, `README.md` index lines) small and
   append-oriented, so they read as a clean diff against whatever else is touching
-  `docs/` in this change.
+  `<DOCROOT>/` in this change.
 
 ## Code is source of truth
 
-The code is the source of truth; `docs/` is a cache that lets an agent navigate it
+The code is the source of truth; `<DOCROOT>/` is a cache that lets an agent navigate it
 fast. If a doc and the code disagree, trust the code — then fix the doc. This is the
 one rule everything else in this playbook exists to serve.

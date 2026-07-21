@@ -1,6 +1,6 @@
 ---
 name: teamlead
-description: Use when the user invokes /teamlead, or asks you to act as a team lead / orchestrator that delegates every unit of work to sub-agents and stays unblocked. Handles /teamlead, /teamlead stop, /teamlead help, and /teamlead brainstorm <agents> <iterations>. Persistent mode for the rest of the session until "stop teamlead". Also handles /teamlead superdoc / /superdoc / init superdoc to set up, audit, or repair a project's self-maintaining docs/ system.
+description: Use when the user invokes /teamlead, or asks you to act as a team lead / orchestrator that delegates every unit of work to sub-agents and stays unblocked. Handles /teamlead, /teamlead stop, /teamlead help, and /teamlead brainstorm <agents> <iterations>. Persistent mode for the rest of the session until "stop teamlead". Also handles /teamlead superdoc / /superdoc / init superdoc to set up, audit, or repair a project's self-maintaining documentation system (a `superdoc/` folder by default, or `docs/`).
 ---
 
 # Teamlead
@@ -19,7 +19,7 @@ Once invoked, stay in Teamlead mode until the user says **"stop teamlead"** / "n
 | `/teamlead stop` | Exit teamlead mode ("normal mode" also works). |
 | `/teamlead help` | Print the **Help text** block below, verbatim. |
 | `/teamlead brainstorm <agents> <iterations> <topic>` | Run a multi-agent brainstorm — see **Brainstorm mode**. |
-| `/teamlead superdoc [path]` | Set up, audit, or repair a project's self-maintaining `docs/` system — see **Superdoc mode**. Also fires on `/superdoc` / "init superdoc" / any mention of "superdoc". |
+| `/teamlead superdoc [path]` | Set up, audit, or repair a project's self-maintaining docs system (a `superdoc/` folder by default, or `docs/`) — see **Superdoc mode**. Also fires on `/superdoc` / "init superdoc" / any mention of "superdoc". |
 
 Parsing `brainstorm`: the **first number is agents, the second is iterations** — always that order. Free text is fine too ("brainstorm with 5 people over 2 rounds about X") — just pull the two numbers out in that order, everything else is the `<topic>`. If a number is missing, default to **5 agents, 2 iterations** and say so in your heads-up.
 
@@ -139,9 +139,11 @@ Let **A** = agents, **I** = iterations (the agent rounds). There is **always one
 
 ## Superdoc mode
 
-`/teamlead superdoc [path]` — and **any mention of "superdoc"** (`/superdoc`, `init superdoc`, "set up superdoc", …) — sets up, audits, or repairs a project's self-maintaining `docs/` system, modelled on ForzaTelemetryV3's docs. It is **one-shot** (banner in → run → banner out; no persistent mode). If the request is ambiguous — you can't tell whether they mean superdoc vs a plain docs task, or which project scope — **ask** in free text before dispatching.
+`/teamlead superdoc [path]` — and **any mention of "superdoc"** (`/superdoc`, `init superdoc`, "set up superdoc", …) — sets up, audits, or repairs a project's self-maintaining docs system, modelled on ForzaTelemetryV3's docs. It is **one-shot** (banner in → run → banner out; no persistent mode). If the request is ambiguous — you can't tell whether they mean superdoc vs a plain docs task, or which project scope — **ask** in free text before dispatching.
 
-**You orchestrate; you do not read/inventory/write docs yourself.** Every unit of real work goes to a dispatched worker. Stay inside the target project folder — don't wander into sibling projects or global paths. User text always overrides this section: a different scope, tier, or skipped step wins.
+**Doc-root folder — `<DOCROOT>`.** The tree lives in one folder at the repo root. Default to and **recommend `superdoc/`**; `docs/` is the alternative. On a FRESH run, ask the user which (Step 2.1) and recommend `superdoc/`; on HEALTH-CHECK/REPAIR use whichever folder already exists. Whatever is chosen, **state it in every dispatch brief** — the playbook writes `<DOCROOT>/` throughout and workers substitute the folder you name. Detection (Step 1) recognises either folder.
+
+**You orchestrate; you do not read/inventory/write docs yourself.** Every unit of real work goes to a dispatched worker. Stay inside the target project folder — don't wander into sibling projects or global paths. User text always overrides this section: a different scope, tier, folder, or skipped step wins.
 
 **Combined skill only.** If a standalone `~/.claude/skills/superdoc/` skill exists (installed without the user asking for it separately), it must be **deleted** — superdoc lives only inside this teamlead skill. Check for it and remove it as part of the run.
 
@@ -151,31 +153,32 @@ Let **A** = agents, **I** = iterations (the agent rounds). There is **always one
 
 Reference these by absolute path in every superdoc dispatch brief; don't duplicate their content into the brief.
 
-**Top of every run:** if `docs/claude-instructions/documentation-version-policy.md` exists in the target project, have it read **first** — the version policy governs the whole run (decision #9, every run).
+**Top of every run:** if `<DOCROOT>/claude-instructions/documentation-version-policy.md` exists in the target project (under `superdoc/` or `docs/`, whichever is present), have it read **first** — the version policy governs the whole run (decision #9, every run).
 
 ### Step 1 — Detect state (inline, no agent)
 
-Cheap enough to do yourself. Check: does a `docs/` folder exist, and is there an *installed* `superdoc:` marker (the `<!-- superdoc:start vN -->` line in the repo-root `CLAUDE.md` — its single, pinned location; see playbook Part 6)? Branch:
+Cheap enough to do yourself. Check for a doc-root folder — **either `superdoc/` or `docs/`** — and an *installed* `superdoc:` marker (the `<!-- superdoc:start vN -->` line in the repo-root `CLAUDE.md` — its single, pinned location; see playbook Part 6). The folder that exists becomes `<DOCROOT>` for this run. Branch:
 
-- `docs/` **+** installed `superdoc:` marker → **HEALTH-CHECK** (Step 3). Do not re-scaffold.
-- No `docs/` and no marker → **FRESH** (Step 2).
-- **GUARD:** `docs/` exists **but no `superdoc:` marker** → these are likely hand-written docs. **Confirm with the user before regenerating** — never clobber existing docs.
+- doc-root folder **+** installed `superdoc:` marker → **HEALTH-CHECK** (Step 3). Do not re-scaffold. Use the folder that's there — don't migrate it.
+- Neither folder and no marker → **FRESH** (Step 2).
+- **GUARD:** a doc-root folder exists **but no `superdoc:` marker** → these are likely hand-written docs. **Confirm with the user before regenerating** — never clobber existing docs.
 
 ### Step 2 — FRESH setup
 
-1. **Ask the version policy** — date-based / auto-bump / manual (AskUserQuestion is fine here; it's setup). Then a worker writes `docs/claude-instructions/documentation-version-policy.md` by copying the chosen variant verbatim from `superdoc-assets/version-policy-{date-based,auto-bump,manual}.md`.
-2. **Scout-then-fan.** Dispatch a **Sonnet** scout to inventory the project's real capabilities (entry points, modules, features). When it returns, **MAP one worker per capability folder** — each scoped to its own folder to avoid write collisions.
-3. **Tier per capability (decision #6):** reading/inventory → **Sonnet**; `architecture/overview.md` + rationale + doc-writing → **Opus**; easy/UI pages → **Sonnet**. The feature-page boundary is blurry — **ASK if unsure** for a given capability rather than guessing.
-4. Every dispatched superdoc worker follows `/home/mo/.claude/skills/teamlead/superdoc-playbook.md`. Emit ForzaV3-shaped docs (`architecture/overview.md` hub, `meta/TERMINOLOGY.md`, `ui/STYLING-GUIDE.md` if UI, `features/*.md` per real capability with inline **Why:** notes, `claude-instructions/documentation.md` copied verbatim, `README.md` ToC, dated design-spec docs for big decisions), wire a thin `CLAUDE.md` via the guarded `superdoc:start`/`superdoc:end` markers, and `@`-force-load only TERMINOLOGY + `claude-instructions/*`.
-5. **Opus QC (decision #7):** after workers land, dispatch a `tl-opus-high` QC pass — every `path:symbol`, relative link, and `@`-ref resolves; **Why:** notes present; `@`-set minimal. Consolidate and tell the user what was created and what was deliberately skipped, and why.
+1. **Pick the doc-root folder.** Ask the user (AskUserQuestion is fine here; it's setup) — **`superdoc/` (recommended, the default)** or **`docs/`**. Recommend `superdoc/`: it namespaces the tree and won't collide with a pre-existing `docs/` of hand-written material. This is `<DOCROOT>` for the rest of the run — put it in every dispatch brief.
+2. **Ask the version policy** — date-based / auto-bump / manual (AskUserQuestion is fine here too). Then a worker writes `<DOCROOT>/claude-instructions/documentation-version-policy.md` by copying the chosen variant verbatim from `superdoc-assets/version-policy-{date-based,auto-bump,manual}.md`.
+3. **Scout-then-fan.** Dispatch a **Sonnet** scout to inventory the project's real capabilities (entry points, modules, features). When it returns, **MAP one worker per capability folder** — each scoped to its own folder to avoid write collisions.
+4. **Tier per capability (decision #6):** reading/inventory → **Sonnet**; `<DOCROOT>/architecture/overview.md` + rationale + doc-writing → **Opus**; easy/UI pages → **Sonnet**. The feature-page boundary is blurry — **ASK if unsure** for a given capability rather than guessing.
+5. Every dispatched superdoc worker follows `/home/mo/.claude/skills/teamlead/superdoc-playbook.md` and is told the chosen `<DOCROOT>`. Emit ForzaV3-shaped docs (`architecture/overview.md` hub, `meta/TERMINOLOGY.md`, `ui/STYLING-GUIDE.md` if UI, `features/*.md` per real capability with inline **Why:** notes, `claude-instructions/documentation.md` copied verbatim, `README.md` ToC, dated design-spec docs for big decisions — all under `<DOCROOT>/`), wire a thin `CLAUDE.md` via the guarded `superdoc:start`/`superdoc:end` markers, and `@`-force-load only TERMINOLOGY + `claude-instructions/*`.
+6. **Opus QC (decision #7):** after workers land, dispatch a `tl-opus-high` QC pass — every `path:symbol`, relative link, and `@`-ref resolves; **Why:** notes present; `@`-set minimal. Consolidate and tell the user what was created and what was deliberately skipped, and why.
 
 ### Step 3 — HEALTH-CHECK (already set up)
 
-Dispatch **one Sonnet** agent to run the playbook's AUDIT: verify every `path:symbol` and relative link resolves, list code areas with no doc page, check the installed `superdoc: vN` marker against the playbook's current version, confirm the `CLAUDE.md` `@`-set is minimal and valid. **Reports only — it touches no file (decision #8).** Present findings, calling out project-dependent drift as a clear list.
+Dispatch **one Sonnet** agent to run the playbook's AUDIT (tell it the existing `<DOCROOT>`): verify every `path:symbol` and relative link resolves, list code areas with no doc page, check the installed `superdoc: vN` marker against the playbook's current version, confirm the `CLAUDE.md` `@`-set is minimal and valid. **Reports only — it touches no file (decision #8).** Present findings, calling out project-dependent drift as a clear list.
 
 ### Step 4 — REPAIR (only on explicit ask)
 
-**Do not auto-fix.** Only if the user explicitly asks, dispatch workers to run the playbook's REPAIR path against the named items, in place — **per-item tier** (reading → Sonnet, doc-writing/architectural → Opus, ask if unsure). Then run the **Opus QC** pass **after** repair too (decision #7).
+**Do not auto-fix.** Only if the user explicitly asks, dispatch workers to run the playbook's REPAIR path (in the existing `<DOCROOT>`) against the named items, in place — **per-item tier** (reading → Sonnet, doc-writing/architectural → Opus, ask if unsure). Then run the **Opus QC** pass **after** repair too (decision #7).
 
 ## Help text (print verbatim for `/teamlead help`)
 
@@ -193,19 +196,21 @@ Glyphs:  🧭 orchestrating   🧠 brainstorm   📄 superdoc
                                  agents-first, iterations-second; free text ok.
                                  e.g. /teamlead brainstorm 5 2 improve the superdoc skill
   /teamlead superdoc [path]      Set up, audit, or repair a project's self-maintaining
-                                 docs/ system. Also fires on /superdoc or "init superdoc".
+                                 docs system (a superdoc/ folder by default, or docs/).
+                                 Also fires on /superdoc or "init superdoc".
 
 Brainstorm: each round the agents think through distinct lenses (security,
 performance, design, …) and each brings 0–5 questions. I gather them, ask you
 in plain text between rounds, and write a running summary. A final Opus verifier
 checks everything's covered, then I offer to save it to docs/brainstorm/ and build it.
 
-Superdoc: I detect whether docs/ is fresh, healthy, or hand-written. Fresh → I ask
-your version policy, scout the real capabilities, and fan out workers (Opus writes
-architecture + rationale, Sonnet reads and does easy pages) to emit a ForzaV3-shaped
-docs/ tree, then an Opus QC pass checks every link and @-ref resolves. Already set up →
-one Sonnet audit that reports drift only; I repair just what you explicitly ask, then
-re-run QC. One-shot: I activate, run it, and deactivate.
+Superdoc: I detect whether the docs tree is fresh, healthy, or hand-written. Fresh → I
+ask which folder to use (superdoc/ recommended, or docs/) and your version policy, scout
+the real capabilities, and fan out workers (Opus writes architecture + rationale, Sonnet
+reads and does easy pages) to emit a ForzaV3-shaped tree, then an Opus QC pass checks
+every link and @-ref resolves. Already set up → one Sonnet audit that reports drift only;
+I repair just what you explicitly ask, then re-run QC. One-shot: I activate, run it, and
+deactivate.
 
 Normal mode routing:
   reads / research / small edits ............ Sonnet (medium/high)

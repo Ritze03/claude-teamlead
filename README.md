@@ -6,7 +6,7 @@ Ships three things in one skill:
 
 - **Orchestration mode** — aggressive background delegation; the main thread never blocks.
 - **`/teamlead brainstorm`** — a real multi-agent brainstorming session (N independent thinkers × M rounds, overlapping lenses, questions asked back to you between rounds, a final Opus verifier, and a saved plan).
-- **`/teamlead superdoc`** — sets up / audits / repairs a project's self-maintaining `docs/` system so new agents never have to guess *why* something was built the way it is.
+- **`/teamlead superdoc`** — sets up / audits / repairs a project's self-maintaining docs system (a `superdoc/` folder by default, or `docs/`) so new agents never have to guess *why* something was built the way it is.
 
 > ⚠️ Personal tooling, not battle-tested. `superdoc` hasn't been run end-to-end against a real repo yet. Use on projects you can `git`-revert.
 
@@ -54,7 +54,7 @@ Then run the installer for your OS — it copies the skill + 3 worker agents int
 | `/teamlead stop` | Turn it off. |
 | `/teamlead help` | Print the command + glyph reference. |
 | `/teamlead brainstorm <agents> <iterations> <topic>` | Multi-agent brainstorm. Numbers are **agents first, iterations second**; free text works. e.g. `/teamlead brainstorm 5 2 improve the auth flow` |
-| `/teamlead superdoc [path]` | Set up / audit / repair a project's `docs/`. Also fires on `/superdoc` or "init superdoc". |
+| `/teamlead superdoc [path]` | Set up / audit / repair a project's docs system — a `superdoc/` folder by default, or `docs/`. Also fires on `/superdoc` or "init superdoc". |
 
 **Glyphs:** 🧭 orchestrating · 🧠 brainstorm · 📄 superdoc · ✅ activated · ❌ deactivated · 🚩 tripwire · ⚠️ needs your input.
 
@@ -77,7 +77,7 @@ The lead routes automatically (unclear/risky → an Opus scout first, then the r
 - **Stay unblocked** — workers run in the background; the lead chains dependent steps on completion events instead of freezing. It posts a short heads-up before each dispatch and a summary when results land.
 - **Split for throughput** — when the same instructions apply across many units (dates, subdirectories, files, modules), it fans out one worker per unit instead of grinding serially. One writer per file; concurrent writers use worktree isolation.
 - **Retry ladder + QC** — a Sonnet worker self-checks, gets one correction attempt, then escalates to Opus; non-trivial work gets an Opus QC pass.
-- **superdoc** models its output on a hand-built reference docs system: a hub `overview.md`, a terminology glossary, a styling guide, per-capability pages with inline `Why:` notes, and a thin `CLAUDE.md` that force-loads only the must-read rules. Version policy (date-based / auto-bump / manual) is chosen per project and stored in-repo.
+- **superdoc** models its output on a hand-built reference docs system: a hub `overview.md`, a terminology glossary, a styling guide, per-capability pages with inline `Why:` notes, and a thin `CLAUDE.md` that force-loads only the must-read rules. The doc-root folder (`superdoc/` by default, or `docs/`) and version policy (date-based / auto-bump / manual) are chosen per project and stored in-repo.
 
 ---
 
