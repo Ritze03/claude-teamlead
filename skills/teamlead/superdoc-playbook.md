@@ -37,6 +37,36 @@ nobody's going to keep earning.
 Re-check this on AUDIT too: if `<DOCROOT>/` turns out to be scaffolding a project that never
 grew into it, say so in the report and propose collapsing it back into `CLAUDE.md`.
 
+### Greenfield / empty project — GROUND-SETUP mode
+
+If the dispatching brief put you in **GROUND-SETUP** (the repo is empty or near-empty — no
+source, no real capabilities yet), the calculus above is **inverted**: you *do* lay the
+skeleton now, precisely so the documentation discipline is force-loaded and live *before*
+the first feature lands. The goal here is forward-looking — not to document code that
+exists, but to make sure code written from here on gets documented as it lands.
+
+Build **only the ground structure** — never invent capability pages for code that doesn't
+exist yet:
+
+- `<DOCROOT>/architecture/overview.md` — the hub, as a **stub**: project name + one-line
+  what-it-is + a "this grows as the project does" note, plus the skeleton's section
+  headings left empty for later. It's the start-here page; the module map and data flow
+  fill in as real code appears.
+- `<DOCROOT>/meta/TERMINOLOGY.md` — created **with the standing rule** (the
+  "ask before acting on an undefined term" text) and an **empty Terms list**. This is the
+  one time the file is seeded before real terms exist: it's part of the force-loaded
+  `@`-set, so it must exist for its `@`-ref to resolve, and terms accrue from session one.
+- `<DOCROOT>/claude-instructions/documentation.md` and `documentation-version-policy.md` —
+  copied verbatim (Part 7), exactly as in any run.
+- A thin `CLAUDE.md` — project-name stub, the guarded `superdoc:start`/`superdoc:end` block
+  (Part 5), and the minimal `@`-set.
+
+Do **not** create `features/`/`commands/`/`endpoints/` folders, a `ui/STYLING-GUIDE.md`, or
+a `<DOCROOT>/README.md` ToC yet — there's nothing to put in them. They get created the
+moment the first real capability is built, per `documentation.md`'s "update after you
+change" rule. The Part 8 gate still applies in full: every `@`-ref must resolve, so the
+files you reference from `CLAUDE.md` have to exist.
+
 ## Part 1 — Detect project shape
 
 Read the manifest/entry points before writing anything: package manifest
@@ -167,7 +197,10 @@ amend the entry here.
 ```
 
 Never create this file empty just to have it exist — it earns its place the first time
-a real project-specific term needs defining.
+a real project-specific term needs defining. **The one exception is GROUND-SETUP** (Part
+0's greenfield section): there you *do* create it with the standing rule above and an
+empty Terms list, because it's part of the force-loaded `@`-set and its `@`-ref must
+resolve from session one.
 
 ### `<DOCROOT>/ui/STYLING-GUIDE.md` (only if the project has a UI)
 

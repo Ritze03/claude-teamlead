@@ -157,20 +157,25 @@ Reference these by absolute path in every superdoc dispatch brief; don't duplica
 
 ### Step 1 — Detect state (inline, no agent)
 
-Cheap enough to do yourself. Check for a doc-root folder — **either `superdoc/` or `docs/`** — and an *installed* `superdoc:` marker (the `<!-- superdoc:start vN -->` line in the repo-root `CLAUDE.md` — its single, pinned location; see playbook Part 6). The folder that exists becomes `<DOCROOT>` for this run. Branch:
+Cheap enough to do yourself (a quick `ls` / glance — that's scoping, not doing). Check three things: **(a)** is the project **empty/greenfield** — no source code, no real capabilities to document yet (a bare `git init`, maybe just a README/LICENSE)? **(b)** does a doc-root folder exist — **either `superdoc/` or `docs/`**? **(c)** is there an *installed* `superdoc:` marker (the `<!-- superdoc:start vN -->` line in the repo-root `CLAUDE.md` — its single, pinned location; see playbook Part 6)? The folder that exists becomes `<DOCROOT>` for this run. Branch:
 
 - doc-root folder **+** installed `superdoc:` marker → **HEALTH-CHECK** (Step 3). Do not re-scaffold. Use the folder that's there — don't migrate it.
-- Neither folder and no marker → **FRESH** (Step 2).
+- No marker, project has **real code/capabilities** → **FRESH, full** (Step 2).
+- No marker, project is **empty/greenfield** → **FRESH, GROUND-SETUP** (Step 2): lay just the skeleton + discipline so agents document as they build. Never bail with "too small for docs" here — the whole point is to make the discipline live *before* the first feature lands.
 - **GUARD:** a doc-root folder exists **but no `superdoc:` marker** → these are likely hand-written docs. **Confirm with the user before regenerating** — never clobber existing docs.
 
 ### Step 2 — FRESH setup
 
-1. **Pick the doc-root folder.** Ask the user (AskUserQuestion is fine here; it's setup) — **`superdoc/` (recommended, the default)** or **`docs/`**. Recommend `superdoc/`: it namespaces the tree and won't collide with a pre-existing `docs/` of hand-written material. This is `<DOCROOT>` for the rest of the run — put it in every dispatch brief.
-2. **Ask the version policy** — date-based / auto-bump / manual (AskUserQuestion is fine here too). Then a worker writes `<DOCROOT>/claude-instructions/documentation-version-policy.md` by copying the chosen variant verbatim from `superdoc-assets/version-policy-{date-based,auto-bump,manual}.md`.
-3. **Scout-then-fan.** Dispatch a **Sonnet** scout to inventory the project's real capabilities (entry points, modules, features). When it returns, **MAP one worker per capability folder** — each scoped to its own folder to avoid write collisions.
-4. **Tier per capability (decision #6):** reading/inventory → **Sonnet**; `<DOCROOT>/architecture/overview.md` + rationale + doc-writing → **Opus**; easy/UI pages → **Sonnet**. The feature-page boundary is blurry — **ASK if unsure** for a given capability rather than guessing.
-5. Every dispatched superdoc worker follows `/home/mo/.claude/skills/teamlead/superdoc-playbook.md` and is told the chosen `<DOCROOT>`. Emit ForzaV3-shaped docs (`architecture/overview.md` hub, `meta/TERMINOLOGY.md`, `ui/STYLING-GUIDE.md` if UI, `features/*.md` per real capability with inline **Why:** notes, `claude-instructions/documentation.md` copied verbatim, `README.md` ToC, dated design-spec docs for big decisions — all under `<DOCROOT>/`), wire a thin `CLAUDE.md` via the guarded `superdoc:start`/`superdoc:end` markers, and `@`-force-load only TERMINOLOGY + `claude-instructions/*`.
-6. **Opus QC (decision #7):** after workers land, dispatch a `tl-opus-high` QC pass — every `path:symbol`, relative link, and `@`-ref resolves; **Why:** notes present; `@`-set minimal. Consolidate and tell the user what was created and what was deliberately skipped, and why.
+Two variants, decided in Step 1: **GROUND-SETUP** (empty/greenfield repo → lay the skeleton + discipline only) or **full FRESH** (real capabilities → skeleton + one page per capability). Steps 1–2 are shared; **greenfield still prompts for both** (don't silently pick). Every dispatched worker follows `/home/mo/.claude/skills/teamlead/superdoc-playbook.md` and is told the chosen `<DOCROOT>`.
+
+1. **Pick the doc-root folder.** Ask via AskUserQuestion (it's setup) — offer **`superdoc/`** and **`docs/`**, with **`superdoc/` as the default (list it first, mark it Recommended)**. `superdoc/` namespaces the tree and won't collide with a pre-existing `docs/` of hand-written material. This is `<DOCROOT>` for the run — put it in every dispatch brief.
+2. **Pick the version policy.** Ask via AskUserQuestion — offer **date-based**, **auto-bump**, **manual**, with **date-based as the default (list it first, mark it Recommended)** — it's the lowest-friction, no version numbers to bump. Then a worker writes `<DOCROOT>/claude-instructions/documentation-version-policy.md` by copying the chosen variant verbatim from `superdoc-assets/version-policy-{date-based,auto-bump,manual}.md`.
+
+**3a — GROUND-SETUP path (empty/greenfield).** No capabilities exist yet, so **do not scout or fan capability pages** — fabricating docs for code that isn't there is exactly the anti-pattern. Dispatch **one worker** to lay the ground structure per playbook Part 0's greenfield section: the `<DOCROOT>/` skeleton (a **stub** `architecture/overview.md` hub, `meta/TERMINOLOGY.md` seeded with the standing "ask before acting on an undefined term" rule + an empty Terms list, `claude-instructions/documentation.md` + the version-policy file copied verbatim) plus a thin `CLAUDE.md` (project-name stub + guarded `superdoc:start`/`superdoc:end` markers + the minimal `@`-set). **No** `features/`/`README.md` ToC yet — those accrete as features get built. Then go to step 4 (QC). Tell the user plainly: the discipline is now force-loaded and live, so every feature built from here gets documented as it lands.
+
+**3b — full FRESH path (real capabilities). Scout-then-fan.** Dispatch a **Sonnet** scout to inventory the project's real capabilities (entry points, modules, features). When it returns, **MAP one worker per capability folder** — each scoped to its own folder to avoid write collisions. **Tier per capability (decision #6):** reading/inventory → **Sonnet**; `<DOCROOT>/architecture/overview.md` + rationale + doc-writing → **Opus**; easy/UI pages → **Sonnet**. The feature-page boundary is blurry — **ASK if unsure** rather than guessing. Workers emit ForzaV3-shaped docs (`architecture/overview.md` hub, `meta/TERMINOLOGY.md`, `ui/STYLING-GUIDE.md` if UI, `features/*.md` per real capability with inline **Why:** notes, `claude-instructions/documentation.md` copied verbatim, `README.md` ToC, dated design-spec docs for big decisions — all under `<DOCROOT>/`), wire a thin `CLAUDE.md` via the guarded `superdoc:start`/`superdoc:end` markers, and `@`-force-load only TERMINOLOGY + `claude-instructions/*`.
+
+4. **Opus QC (decision #7):** after workers land, dispatch a `tl-opus-high` QC pass — every `path:symbol`, relative link, and `@`-ref resolves; **Why:** notes present (full FRESH); `@`-set minimal. Consolidate and tell the user what was created and what was deliberately skipped, and why.
 
 ### Step 3 — HEALTH-CHECK (already set up)
 
@@ -204,11 +209,13 @@ performance, design, …) and each brings 0–5 questions. I gather them, ask yo
 in plain text between rounds, and write a running summary. A final Opus verifier
 checks everything's covered, then I offer to save it to docs/brainstorm/ and build it.
 
-Superdoc: I detect whether the docs tree is fresh, healthy, or hand-written. Fresh → I
-ask which folder to use (superdoc/ recommended, or docs/) and your version policy, scout
-the real capabilities, and fan out workers (Opus writes architecture + rationale, Sonnet
-reads and does easy pages) to emit a ForzaV3-shaped tree, then an Opus QC pass checks
-every link and @-ref resolves. Already set up → one Sonnet audit that reports drift only;
+Superdoc: I detect whether the docs tree is fresh, healthy, hand-written, or greenfield.
+Fresh → I ask which folder to use (superdoc/ default, or docs/) and your version policy
+(date-based default), scout the real capabilities, and fan out workers (Opus writes
+architecture + rationale, Sonnet reads and does easy pages) to emit a ForzaV3-shaped tree,
+then an Opus QC pass checks every link and @-ref resolves. Empty repo → I lay just the
+ground structure (skeleton + force-loaded discipline) so everything you build afterward
+gets documented as it lands. Already set up → one Sonnet audit that reports drift only;
 I repair just what you explicitly ask, then re-run QC. One-shot: I activate, run it, and
 deactivate.
 
