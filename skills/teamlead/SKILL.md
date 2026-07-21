@@ -43,32 +43,36 @@ Effort can't be set per-call, so each combo is a fixed agent type. Dispatch via 
 
 | agent type | model / effort | use for |
 |---|---|---|
-| `tl-sonnet-medium` | Sonnet · Medium | reading, research, info-gathering, small/UI edits with a clear path |
-| `tl-sonnet-high` | Sonnet · High | writing non-trivial code from a plan you already provided; heavier UI work |
-| `tl-opus-high` | Opus · High | reasoning, bug fixes, unclear/architectural edits, image analysis, UI logic, **scouting**, **QC** |
+| `tl-sonnet-medium` | Sonnet 5 · Medium | reading, research, info-gathering, **bounded scouting**, small/UI edits with a clear path |
+| `tl-sonnet-high` | Sonnet 5 · High | **the default workhorse** — non-trivial code from a plan, **bug fixes**, UI logic, unclear-but-bounded edits, and **default QC** |
+| `tl-opus-high` | Opus 4.8 · High | **advanced reasoning only** — hard architecture/design, ambiguous cross-system debugging, image analysis, the **escalation target** when Sonnet fails twice, high-stakes QC |
+
+**Default to Sonnet 5.** It carries essentially all execution — including bug fixes, UI logic, and most scouting/QC. Opus is *opt-in for advanced reasoning and the escalation ceiling*, **not** the default whenever a path is merely "unclear." Reach for Opus only when the reasoning itself is the hard part (a genuine architecture/design call, ambiguous multi-system debugging, an image to read) or when a Sonnet worker has already failed twice.
 
 User override wins: if the user names a model or effort, use it — spawn `claude` with a `model` override if no matching type fits.
 
-## Routing: scout first when the path isn't obvious
+## Routing: Sonnet by default, scout when the path isn't obvious
 
 ```dot
 digraph route {
   "New task" [shape=box];
   "Path obvious + low-risk?" [shape=diamond];
-  "Reasoning-heavy? (bug, unclear edit, arch, image, UI logic)" [shape=diamond];
-  "Dispatch worker directly" [shape=box];
-  "Scout: tl-opus-high" [shape=box];
+  "Needs ADVANCED reasoning? (hard arch/design, ambiguous cross-system debug, image)" [shape=diamond];
+  "Dispatch Sonnet worker directly" [shape=box];
+  "Scout: tl-sonnet (Opus only if arch is the puzzle)" [shape=box];
   "tl-opus-high" [shape=box];
 
   "New task" -> "Path obvious + low-risk?";
-  "Path obvious + low-risk?" -> "Dispatch worker directly" [label="yes"];
-  "Path obvious + low-risk?" -> "Reasoning-heavy? (bug, unclear edit, arch, image, UI logic)" [label="no"];
-  "Reasoning-heavy? (bug, unclear edit, arch, image, UI logic)" -> "tl-opus-high" [label="yes → do the work"];
-  "Reasoning-heavy? (bug, unclear edit, arch, image, UI logic)" -> "Scout: tl-opus-high" [label="unsure → gather info"];
+  "Path obvious + low-risk?" -> "Dispatch Sonnet worker directly" [label="yes"];
+  "Path obvious + low-risk?" -> "Needs ADVANCED reasoning? (hard arch/design, ambiguous cross-system debug, image)" [label="no"];
+  "Needs ADVANCED reasoning? (hard arch/design, ambiguous cross-system debug, image)" -> "tl-opus-high" [label="yes → do the work"];
+  "Needs ADVANCED reasoning? (hard arch/design, ambiguous cross-system debug, image)" -> "Scout: tl-sonnet (Opus only if arch is the puzzle)" [label="unsure → gather info"];
 }
 ```
 
-**Scout → execute:** when the right approach or the needed context isn't clear, first dispatch a `tl-opus-high` **scout** whose only job is to gather the info/reason it through and **return: (a) findings, (b) a recommendation `{agent type, effort}` for the execution.** When the scout lands, dispatch the recommended worker with those findings in its brief. (This is how you use Opus to think and Sonnet to type — never nest agents, you do the chaining.)
+Note what's **no longer** an automatic Opus ticket: bug fixes, UI logic, and unclear-but-bounded edits all go straight to `tl-sonnet-high`. Only route to Opus when the reasoning itself is the hard part, or on escalation.
+
+**Scout → execute:** when the right approach or the needed context isn't clear, first dispatch a **scout** — `tl-sonnet-medium` by default (bump to `tl-sonnet-high` for a big surface, or `tl-opus-high` only when the *architecture itself* is the puzzle) — whose only job is to gather the info/reason it through and **return: (a) findings, (b) a recommendation `{agent type, effort}` for the execution.** When the scout lands, dispatch the recommended worker with those findings in its brief. (Never nest agents — you do the chaining. Save Opus for when Sonnet's scout says the problem is genuinely hard.)
 
 ## Sizing the dispatch — how many workers?
 
@@ -103,8 +107,8 @@ digraph route {
 
 ## Retry ladder & QC
 
-- A **Sonnet** worker self-checks. If wrong, it gets **one** correction attempt (same Sonnet). Still wrong → escalate the task to **`tl-opus-high`**.
-- After a Sonnet worker finishes non-trivial work, dispatch a **`tl-opus-high` QC** agent with the original goal + what the worker did. Pass → done. Small issue → let the QC Opus fix it directly. Big issue → re-scope and re-dispatch.
+- A **Sonnet** worker self-checks. If wrong, it gets **one** correction attempt (same Sonnet). Still wrong → escalate the task to **`tl-opus-high`**. This escalation is now the *main* road to Opus — most Opus work arrives here, not by first-choice routing.
+- After a Sonnet worker finishes non-trivial work, dispatch a **QC** agent with the original goal + what the worker did. **QC defaults to `tl-sonnet-high`** — reserve a **`tl-opus-high` QC** for high-stakes work only (architectural change, security-sensitive, data-loss-adjacent, or a public/irreversible surface). Pass → done. Small issue → let the QC agent fix it directly. Big issue → re-scope and re-dispatch.
 
 ## Brainstorm mode
 
@@ -117,7 +121,7 @@ Let **A** = agents, **I** = iterations (the agent rounds). There is **always one
 ### Setup (once, before round 1)
 1. **Topic + context.** If the topic names a directory/path, every agent reads it. If context is unclear, ask (free text).
 2. **Lenses — overlapping, never silos.** Give each agent a **primary lens** as a *starting angle* — Security, Performance, Extensibility, Reliability, Design/UX, Maintainability, Testing, Cost/Simplicity, … — but tell **every** agent to range across the **whole topic** and weigh in on anything, including other agents' concerns. Overlap is the point: you want several independent opinions on the same questions, not one owner per area. **No single agent's take may close off a decision or a line of thinking.** Pick primary lenses that fit the topic (ask the user if unsure), and deliberately let 2+ agents cover the highest-stakes areas.
-3. **Pick the worker model.** Ask the user which worker type to run the agents on — **use the AskUserQuestion tool here** (this is setup, not the in-session Q&A) — offering all three: `tl-opus-high` (**recommended** — brainstorming is reasoning-heavy), `tl-sonnet-high` (cheaper, solid), `tl-sonnet-medium` (cheapest). Use the chosen type for every brainstorm agent this session.
+3. **Pick the worker model.** Ask the user which worker type to run the agents on — **use the AskUserQuestion tool here** (this is setup, not the in-session Q&A) — offering all three: `tl-sonnet-high` (**recommended** — Sonnet 5 is strong enough to brainstorm well at a fraction of the cost), `tl-opus-high` (pricier, for when you want maximum depth), `tl-sonnet-medium` (cheapest). Use the chosen type for every brainstorm agent this session. (The single final verify round stays on `tl-opus-high` regardless — one high-stakes reasoning pass.)
 
 ### Each round i = 1..I
 1. Heads-up: `🧠 Round i/I — A [model] agents thinking (lenses: …).`
@@ -175,7 +179,7 @@ Two variants, decided in Step 1: **GROUND-SETUP** (empty/greenfield repo → lay
 
 **3b — full FRESH path (real capabilities). Scout-then-fan.** Dispatch a **Sonnet** scout to inventory the project's real capabilities (entry points, modules, features). When it returns, **MAP one worker per capability folder** — each scoped to its own folder to avoid write collisions. **Tier per capability (decision #6):** reading/inventory → **Sonnet**; `<DOCROOT>/architecture/overview.md` + rationale + doc-writing → **Opus**; easy/UI pages → **Sonnet**. The feature-page boundary is blurry — **ASK if unsure** rather than guessing. Workers emit ForzaV3-shaped docs (`architecture/overview.md` hub, `meta/TERMINOLOGY.md`, `ui/STYLING-GUIDE.md` if UI, `features/*.md` per real capability with inline **Why:** notes, `claude-instructions/documentation.md` copied verbatim, `README.md` ToC, dated design-spec docs for big decisions — all under `<DOCROOT>/`), wire a thin `CLAUDE.md` via the guarded `superdoc:start`/`superdoc:end` markers, and `@`-force-load only TERMINOLOGY + `claude-instructions/*`.
 
-4. **Opus QC (decision #7):** after workers land, dispatch a `tl-opus-high` QC pass — every `path:symbol`, relative link, and `@`-ref resolves; **Why:** notes present (full FRESH); `@`-set minimal. Consolidate and tell the user what was created and what was deliberately skipped, and why.
+4. **QC (decision #7):** after workers land, dispatch a QC pass — every `path:symbol`, relative link, and `@`-ref resolves; **Why:** notes present (full FRESH); `@`-set minimal. These checks are mechanical, so **`tl-sonnet-high` by default**; escalate to `tl-opus-high` only if QC surfaces an architectural gap that needs re-reasoning. Consolidate and tell the user what was created and what was deliberately skipped, and why.
 
 ### Step 3 — HEALTH-CHECK (already set up)
 
@@ -183,7 +187,7 @@ Dispatch **one Sonnet** agent to run the playbook's AUDIT (tell it the existing 
 
 ### Step 4 — REPAIR (only on explicit ask)
 
-**Do not auto-fix.** Only if the user explicitly asks, dispatch workers to run the playbook's REPAIR path (in the existing `<DOCROOT>`) against the named items, in place — **per-item tier** (reading → Sonnet, doc-writing/architectural → Opus, ask if unsure). Then run the **Opus QC** pass **after** repair too (decision #7).
+**Do not auto-fix.** Only if the user explicitly asks, dispatch workers to run the playbook's REPAIR path (in the existing `<DOCROOT>`) against the named items, in place — **per-item tier** (reading → Sonnet, ordinary doc-writing → Sonnet, only genuinely architectural rationale → Opus, ask if unsure). Then run the **QC** pass **after** repair too — `tl-sonnet-high` by default, `tl-opus-high` only for architectural repairs (decision #7).
 
 ## Help text (print verbatim for `/teamlead help`)
 
@@ -211,17 +215,19 @@ checks everything's covered, then I offer to save it to docs/brainstorm/ and bui
 
 Superdoc: I detect whether the docs tree is fresh, healthy, hand-written, or greenfield.
 Fresh → I ask which folder to use (superdoc/ default, or docs/) and your version policy
-(date-based default), scout the real capabilities, and fan out workers (Opus writes
-architecture + rationale, Sonnet reads and does easy pages) to emit a ForzaV3-shaped tree,
-then an Opus QC pass checks every link and @-ref resolves. Empty repo → I lay just the
+(date-based default), scout the real capabilities, and fan out workers (Opus only for
+architecture + rationale, Sonnet reads and does the rest) to emit a ForzaV3-shaped tree,
+then a Sonnet QC pass checks every link and @-ref resolves. Empty repo → I lay just the
 ground structure (skeleton + force-loaded discipline) so everything you build afterward
 gets documented as it lands. Already set up → one Sonnet audit that reports drift only;
 I repair just what you explicitly ask, then re-run QC. One-shot: I activate, run it, and
 deactivate.
 
-Normal mode routing:
-  reads / research / small edits ............ Sonnet (medium/high)
-  bugs, images, unclear edits, UI logic ..... Opus (high)
+Normal mode routing (Sonnet 5 is the default; Opus is opt-in):
+  reads / research / small edits ............ Sonnet 5 (medium)
+  code-from-plan / bugs / UI logic / QC ..... Sonnet 5 (high)
+  hard arch, ambiguous cross-system debug,
+  images, or escalation after Sonnet fails .. Opus 4.8 (high)
 Everything runs in the background so you're never blocked. Short heads-up before
 each dispatch, short summary when results land.
 ```
@@ -229,7 +235,8 @@ each dispatch, short summary when results land.
 ## Quick reference
 
 - Default = background dispatch. Heads-up first. Stay free for the user.
-- Obvious+simple → Sonnet-med/high directly. Unclear/risky → Opus-high scout → recommended worker.
-- Bugs, images, unclear edits, UI logic → Opus-high. Reads/research/small UI → Sonnet.
+- **Sonnet 5 is the default worker.** Obvious+simple → Sonnet-med/high directly. Unclear/risky → Sonnet scout → recommended worker.
+- Bugs, UI logic, unclear-but-bounded edits, QC → **Sonnet-high**. Reads/research/small UI → Sonnet-med.
+- **Opus only for advanced reasoning**: hard arch/design, ambiguous cross-system debugging, image analysis, or escalation after a Sonnet worker fails twice.
 - Same instructions, different scope → parallelize by date/dir/module/file.
 - One writer per file. Concurrent writers → worktree isolation.

@@ -1,7 +1,7 @@
 ---
 name: tl-sonnet-medium
-description: Teamlead worker — Sonnet, medium effort. Reading, research, gathering information, and small/UI edits with a clear path.
-model: sonnet
+description: Teamlead worker — Sonnet 5, medium effort. Reading, research, gathering information, bounded scouting, and small/UI edits with a clear path.
+model: claude-sonnet-5
 effort: medium
 disallowedTools: Task, Agent, Workflow
 ---
