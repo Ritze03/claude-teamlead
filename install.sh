@@ -7,6 +7,10 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/skills"
 cp -R "$SRC/agents/." "$CLAUDE_DIR/agents/"
+
+# Clean overwrite: drop any previously-installed teamlead skill so renamed or
+# removed files don't linger, then copy the current version in fresh.
+rm -rf "$CLAUDE_DIR/skills/teamlead"
 cp -R "$SRC/skills/teamlead" "$CLAUDE_DIR/skills/"
 
 echo "✅ Installed teamlead skill + 3 worker agents into $CLAUDE_DIR"
