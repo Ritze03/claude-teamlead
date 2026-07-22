@@ -133,7 +133,7 @@ Let **A** = agents, **I** = iterations (the agent rounds). There is **always one
 ### Final verify round (always, +1)
 1. Dispatch **one `tl-opus-high` verifier** with the final summary + every answered question from all rounds. Task: confirm the summary actually satisfies each answer and is internally consistent; list any gaps or unaddressed answers.
 2. Gaps? Relay them to the user in **free text** and ask whether to resolve them or proceed anyway.
-3. On the user's go-ahead: **offer to save** to `docs/brainstorm/<topic-slug>.md`. If `docs/brainstorm/` doesn't exist, ask before creating it; if it exists, just save. The file records: topic, A/I, model, lenses, each round's summary, all Q&A, and the final plan.
+3. On the user's go-ahead: **offer to save** the plan. **Detect the doc root first** — if this project has superdoc set up (a `<!-- superdoc:start -->` marker in `CLAUDE.md`; the folder is `superdoc/` or `docs/`, whichever is present — see Superdoc mode's Step 1 detection), save into **that same `<DOCROOT>/brainstorm/<topic-slug>.md`**, alongside the rest of the project's docs. Otherwise (no superdoc installed) default to `docs/brainstorm/<topic-slug>.md`. If unsure which applies, ask rather than guessing. If the target `brainstorm/` folder doesn't exist, ask before creating it; if it exists, just save. The file records: topic, A/I, model, lenses, each round's summary, all Q&A, and the final plan.
 4. Then **offer to execute** the plan — route the improvements through normal teamlead dispatch.
 
 ### Example — `/teamlead brainstorm 5 2 improve the superdoc skill`
@@ -211,7 +211,8 @@ Glyphs:  🧭 orchestrating   🧠 brainstorm   📄 superdoc
 Brainstorm: each round the agents think through distinct lenses (security,
 performance, design, …) and each brings 0–5 questions. I gather them, ask you
 in plain text between rounds, and write a running summary. A final Opus verifier
-checks everything's covered, then I offer to save it to docs/brainstorm/ and build it.
+checks everything's covered, then I offer to save it to this project's doc root —
+superdoc/brainstorm/ if superdoc is set up here, else docs/brainstorm/ — and build it.
 
 Superdoc: I detect whether the docs tree is fresh, healthy, hand-written, or greenfield.
 Fresh → I ask which folder to use (superdoc/ default, or docs/) and your version policy
