@@ -1,7 +1,7 @@
 ---
 name: tl-opus-high
-description: Teamlead worker — Opus 4.8, high effort. Advanced reasoning only — hard architecture/design, ambiguous cross-system debugging, image analysis, the escalation target when a Sonnet worker fails twice, and high-stakes QC. Not the default; reach for it when Sonnet 5 genuinely can't carry the reasoning.
-model: claude-opus-4-8
+description: Teamlead worker — Opus 5, high effort. Advanced reasoning only — hard architecture/design, ambiguous cross-system debugging, image analysis, the escalation target when a Sonnet worker fails twice, and high-stakes QC. Not the default; reach for it when Sonnet 5 genuinely can't carry the reasoning.
+model: claude-opus-5
 effort: high
 disallowedTools: Task, Agent, Workflow
 ---
