@@ -26,13 +26,13 @@ Once invoked, stay in Teamlead mode until the user says **"stop teamlead"** / "n
    - **`git: no` → fall back to the current behavior:** worktree isolation isn't available, so partition writes by file/directory so no two agents touch the same file, and keep research/reading agents separate from the ones editing.
 3. **`settings: present`** → apply the **effort dial** level and **Opus Usage** mode silently for the rest of the session, then continue normally (greet, or act on the subcommand). **`settings: missing`** → **do not** send the generic "what would you like me to orchestrate?" greeting, or act on `brainstorm`/`superdoc` — run **Project setup** below *first*, before anything else reaches the user:
    1. Heads-up, one line, so it reads as a setup step and not small talk: `📋 First run in this project — configuring Teamlead.`
-   2. **One AskUserQuestion call, three questions, always in this order.** `AskUserQuestion` caps each question at **2–4 tappable options** — the 5-value Effort dial doesn't fit in one question without spilling into free-text "Other," which defeats the point (pick, don't type). Split it into two small questions that combine to all 5 levels instead:
+   2. **One AskUserQuestion call, three questions, always in this order.** `AskUserQuestion` caps each question at **2–4 tappable options** — the 6-value Effort dial doesn't fit in one question without spilling into free-text "Other," which defeats the point (pick, don't type). Split it into two small questions that combine to all 6 levels instead:
       - **Q1 — Effort direction** (header `Effort`): `Low`, `Medium` (Recommended), `High` — 3 options.
-      - **Q2 — Hard cap?** (header `Cap?`): `No — just a bias` (Recommended), `Yes — hard cap`. Give the `Yes` option's **description** field this exact meaning, don't leave it implicit: *"Permanently disables the tier your Direction answer leans away from — capping Low or Medium disables `tl-sonnet-high`/`tl-opus-high` entirely; capping High disables `tl-sonnet-low`/`tl-opus-low` entirely."* Combine with Q1:
+      - **Q2 — Hard cap?** (header `Cap?`): `No — just a bias` (Recommended), `Yes — hard cap`. Give the `Yes` option's **description** field this exact meaning, don't leave it implicit: *"Permanently disables the tier your Direction answer leans away from — capping Low or Medium disables `tl-sonnet-high`/`tl-opus-high` entirely; capping High disables `tl-sonnet-low`/`tl-opus-low` entirely."* Combine with Q1 — **each direction gets its own distinct capped level, capping never collapses two directions into one**:
         - (Low, No) = `low`
         - (Low, Yes) = `xlow`
         - (Medium, No) = `medium`
-        - (Medium, Yes) = `xlow` — Medium has no direction of its own, so a hard cap here defaults to trimming the pricier side: disable the High-effort tier, same as capping Low. Since Medium's own workhorse (`tl-sonnet-high`) and escalation ceiling (`tl-opus-high`) both sit inside that now-banned tier, routing falls back to the next rung down on each — `tl-sonnet-medium` workhorse, `tl-opus-medium` ceiling — which *is* `xlow`'s definition. Ignore the High-effort options, only the lower rungs remain reachable.
+        - (Medium, Yes) = `xmedium` — Medium has no direction of its own, so a hard cap here defaults to trimming the pricier side: disable the High-effort tier, same as capping Low. But it stays its **own** level, not an alias for `xlow`: its scout stays at `tl-sonnet-medium` (Medium's own default), it does **not** drop to `tl-sonnet-low` the way `low`/`xlow` do. Only the workhorse and escalation ceiling fall back — from `tl-sonnet-high`/`tl-opus-high` (now banned) to `tl-sonnet-medium`/`tl-opus-medium`. Net effect: `xmedium` leans noticeably closer to `medium` than `xlow` does.
         - (High, No) = `high`
         - (High, Yes) = `xhigh`
       - **Q3 — Opus Usage** (header `Opus`): `role-dependant` (Recommended, default), `on-demand`, `never` — 3 options, fits in one question as-is.
@@ -48,7 +48,7 @@ Once invoked, stay in Teamlead mode until the user says **"stop teamlead"** / "n
 | `/teamlead help` | Print the **Help text** block below, verbatim. |
 | `/teamlead brainstorm <agents> <iterations> <topic>` | Run a multi-agent brainstorm — see **Brainstorm mode**. |
 | `/teamlead superdoc [path]` | Set up, audit, or repair a project's self-maintaining docs system (a `superdoc/` folder by default, or `docs/`) — see **Superdoc mode**. Also fires on `/superdoc` / "init superdoc" / any mention of "superdoc". |
-| `/teamlead effort <xlow\|low\|medium\|high\|xhigh>` | Set this project's bias for worker model/effort routing (persisted) — see **Effort dial**. No argument re-asks the Q1/Q2 picker from **Project setup**, prefaced with the current setting. |
+| `/teamlead effort <xlow\|low\|medium\|xmedium\|high\|xhigh>` | Set this project's bias for worker model/effort routing (persisted) — see **Effort dial**. No argument re-asks the Q1/Q2 picker from **Project setup**, prefaced with the current setting. |
 | `/teamlead opus <role-dependant\|on-demand\|never>` | Set this project's Opus policy for **workers** (persisted) — see **Opus Usage**. No argument re-asks the Q3 picker from **Project setup**, prefaced with the current setting. |
 
 Parsing `brainstorm`: the **first number is agents, the second is iterations** — always that order. Free text is fine too ("brainstorm with 5 people over 2 rounds about X") — just pull the two numbers out in that order, everything else is the `<topic>`. If a number is missing, default to **5 agents, 2 iterations** and say so in your heads-up.
@@ -88,15 +88,18 @@ User override wins: if the user names a model or effort, use it — spawn `claud
 
 The worker ladder, cheapest to priciest: `tl-sonnet-low` → `tl-sonnet-medium` → `tl-sonnet-high` → `tl-opus-low` → `tl-opus-medium` → `tl-opus-high`. (All Sonnet tiers rank below all Opus tiers — Opus is the pricier model regardless of effort.) The **effort dial** is a per-project bias on where your default routing calls (workhorse, scout, QC, escalation) land on that ladder. It doesn't replace the routing rules below, it shifts them — a `low`-biased project still escalates a genuinely stuck task, just a rung later than `medium` would; a `high`-biased project still leaves a trivial read on Sonnet.
 
+Six levels, grouped as three directions × capped-or-not:
+
 | level | direction | effect |
 |---|---|---|
-| `xlow` | floor, capped | Bias fully toward the cheap end **and hard-disable the High-effort tier** — `tl-sonnet-high` and `tl-opus-high` are never dispatched, full stop. Workhorse → `tl-sonnet-medium`; escalation path → `tl-opus-low` → `tl-opus-medium` (ceiling). |
 | `low` | shift down one rung | Workhorse `tl-sonnet-high` → `tl-sonnet-medium`; scout `tl-sonnet-medium` → `tl-sonnet-low`; escalation target `tl-opus-medium` → `tl-opus-low` (`tl-opus-medium`/`tl-opus-high` only if that still fails, or the failure is clearly architectural). |
+| `xlow` | `low`, hard-capped | Same shift as `low` (workhorse `tl-sonnet-medium`, scout `tl-sonnet-low`) **plus hard-disable the High-effort tier** — `tl-sonnet-high` and `tl-opus-high` are never dispatched, full stop. Escalation ceiling: `tl-opus-low` → `tl-opus-medium`, no further. |
 | `medium` | **default — no shift** | The routing documented below, unchanged: workhorse `tl-sonnet-high`, scout `tl-sonnet-medium`, escalation → `tl-opus-medium` → `tl-opus-high`. |
+| `xmedium` | `medium`, hard-capped | Scout stays `tl-sonnet-medium` — **not** lowered to `tl-sonnet-low`, unlike `xlow` — **plus hard-disable the High-effort tier**. Medium's own workhorse/ceiling sit in that now-banned tier, so both fall back one rung: workhorse `tl-sonnet-medium`, escalation ceiling `tl-opus-medium` (hard, no further). Closer to `medium` than `xlow` is. |
 | `high` | shift up one rung | Workhorse `tl-sonnet-high` → `tl-opus-medium`; scout `tl-sonnet-medium` → `tl-sonnet-high`; QC reaches for Opus more readily; escalation target `tl-opus-medium` → `tl-opus-high`. |
-| `xhigh` | ceiling, capped | Bias fully toward the capable end **and hard-disable the Low-effort tier** — `tl-sonnet-low` and `tl-opus-low` are never dispatched, full stop. Workhorse → `tl-opus-medium`; scout → `tl-sonnet-medium`/`tl-sonnet-high`. |
+| `xhigh` | `high`, hard-capped | Same shift as `high` (workhorse `tl-opus-medium`, scout `tl-sonnet-high`) **plus hard-disable the Low-effort tier** — `tl-sonnet-low` and `tl-opus-low` are never dispatched, full stop. |
 
-`xlow`/`xhigh` are hard caps — the disabled agent types drop out of the pool entirely, even as an escalation target. `low`/`medium`/`high` are only a bias — every agent type stays reachable, retry ladder included.
+`xlow`/`xmedium`/`xhigh` are hard caps — the disabled agent types drop out of the pool entirely, even as an escalation target. `low`/`medium`/`high` (uncapped) are only a bias — every agent type stays reachable, retry ladder included.
 
 **Bare `/teamlead effort`** (no level) — don't print a static help block, **ask**: one line stating the current setting (`Current: <level>`, or "not set yet"), then the exact same **Q1 (Direction) + Q2 (Cap)** AskUserQuestion pair from **Project setup** (see **On activation**) — tappable options, not typed text. Write the resulting level to just the `effort:` line (leave `opus:` untouched).
 
@@ -349,9 +352,10 @@ Glyphs:  🧭 orchestrating   🧠 brainstorm   📄 superdoc
   /teamlead superdoc [path]      Set up, audit, or repair a project's self-maintaining
                                  docs system (a superdoc/ folder by default, or docs/).
                                  Also fires on /superdoc or "init superdoc".
-  /teamlead effort <level>       Set this project's routing bias: xlow/low/medium/high/xhigh.
-                                 low/medium/high shift the default worker up or down a rung;
-                                 xlow/xhigh also hard-disable the High/Low tier.
+  /teamlead effort <level>       Set this project's routing bias: xlow/low/medium/xmedium/high/xhigh.
+                                 low/medium/high shift the default worker up or down a rung; the
+                                 x-prefixed variant of each additionally hard-disables the tier
+                                 it leans away from (xlow/xmedium ban High-effort, xhigh bans Low).
   /teamlead opus <mode>          Set this project's Opus policy for workers: role-dependant
                                  (default, Opus first-choice when the role calls for it),
                                  on-demand (Opus only as retry-ladder fallback), or never
@@ -418,7 +422,7 @@ marked parallel with each other. Always printed for brainstorm.
 - Same instructions, different scope → parallelize by date/dir/module/file.
 - One writer per file. **In a git repo, every editor gets its own worktree by default** (check once per session); outside git, partition writes by file/directory instead.
 - **Session start = one batched command** (git regime + worktrees + `.claude/teamlead.md` existence/contents), not three separate lookups. See **Hard boundaries**.
-- **First run in a project (`settings: missing`)** → **Project setup** *immediately on activation* — before the "what would you like me to orchestrate?" greeting, before acting on `brainstorm`/`superdoc`, before anything: heads-up line, then one AskUserQuestion call, 3 questions, all tappable (AskUserQuestion caps at 4 options/question, so Effort splits in two) — Q1 direction (`Low`/`Medium` Recommended/`High`), Q2 cap (`No — bias only` Recommended/`Yes — hard cap`, combines with Q1 into `xlow`…`xhigh`), Q3 Opus Usage (`role-dependant` Recommended/`on-demand`/`never`) — save the answers so they're never asked again.
+- **First run in a project (`settings: missing`)** → **Project setup** *immediately on activation* — before the "what would you like me to orchestrate?" greeting, before acting on `brainstorm`/`superdoc`, before anything: heads-up line, then one AskUserQuestion call, 3 questions, all tappable (AskUserQuestion caps at 4 options/question, so Effort splits in two) — Q1 direction (`Low`/`Medium` Recommended/`High`), Q2 cap (`No — bias only` Recommended/`Yes — hard cap`, combines with Q1 into 6 levels — `xmedium` is its own level, not folded into `xlow`), Q3 Opus Usage (`role-dependant` Recommended/`on-demand`/`never`) — save the answers so they're never asked again.
 - **`/teamlead effort` or `/teamlead opus` with no argument** → state the current setting, then re-open the same tappable AskUserQuestion picker used at first run (Q1+Q2 for effort, Q3 for opus). Never fall back to a typed answer or a static printout.
 - **First 2+ agent dispatch of the session (outside brainstorm)** → ask Sequential vs QC Prompting; reuse the answer after that.
 - **Brainstorm setup** → ask Normal / Extended / 2x mode alongside the worker model.

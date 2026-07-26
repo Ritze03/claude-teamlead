@@ -55,7 +55,7 @@ Then run the installer for your OS — it copies the skill + 6 worker agents int
 | `/teamlead help` | Print the command + glyph reference. |
 | `/teamlead brainstorm <agents> <iterations> <topic>` | Multi-agent brainstorm. Numbers are **agents first, iterations second**; free text works. e.g. `/teamlead brainstorm 5 2 improve the auth flow` |
 | `/teamlead superdoc [path]` | Set up / audit / repair a project's docs system — a `superdoc/` folder by default, or `docs/`. Also fires on `/superdoc` or "init superdoc". |
-| `/teamlead effort <xlow\|low\|medium\|high\|xhigh>` | Bias this project's worker model/effort routing (persisted). No argument reports the current setting. |
+| `/teamlead effort <xlow\|low\|medium\|xmedium\|high\|xhigh>` | Bias this project's worker model/effort routing (persisted). No argument reports the current setting. |
 | `/teamlead opus <role-dependant\|on-demand\|never>` | Set this project's Opus policy for **workers** (persisted). The lead's own model is unaffected. No argument reports the current setting. |
 
 **Glyphs:** 🧭 orchestrating · 🧠 brainstorm · 📄 superdoc · ✅ activated · ❌ deactivated · 🚩 tripwire · ⚠️ needs your input.
@@ -75,7 +75,7 @@ Effort can't be set per-call in Claude Code — it comes from agent frontmatter 
 
 **Sonnet 5 is the default worker**; Opus is opt-in for advanced reasoning and the escalation ceiling — not the default whenever a path is merely "unclear." The lead routes automatically (unclear/risky → a Sonnet scout first, then the recommended worker; QC defaults to Sonnet, Opus only for high-stakes work). You can always override by naming a model/effort.
 
-Each project can also bias this routing with `/teamlead effort <xlow|low|medium|high|xhigh>` — `low`/`medium`/`high` shift the default worker a rung down/unchanged/up the ladder above, `xlow`/`xhigh` additionally hard-disable the High/Low tier outright.
+Each project can also bias this routing with `/teamlead effort <xlow|low|medium|xmedium|high|xhigh>` — `low`/`medium`/`high` shift the default worker a rung down/unchanged/up the ladder above; `xlow`/`xmedium`/`xhigh` additionally hard-disable the High-effort tier (or Low-effort tier, for `xhigh`) outright. `xmedium` stays closer to `medium` than `xlow` does — it keeps `medium`'s own scout instead of dropping to `low`'s.
 
 A separate `/teamlead opus <role-dependant|on-demand|never>` dial controls whether **worker** dispatch can reach Opus at all: `role-dependant` (default) matches the routing above; `on-demand` makes Opus fallback-only (never first-choice, only after a Sonnet worker actually fails); `never` removes Opus workers entirely — a stuck Sonnet worker asks the lead directly instead of escalating, and the lead reasons through just that one blocker before handing it back. This doesn't touch the lead's own model, only workers.
 
