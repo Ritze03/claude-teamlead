@@ -207,11 +207,12 @@ Either mode still gets the retry ladder and QC pass after agents return (see bel
   3. **`settings: present`** → apply the **effort dial** level and **Opus Usage** mode already read (from the batched command's output) for the rest of the session, no need to mention it. **`settings: missing`** → this is the project's first run — run **Project setup** below before dispatching anything else.
   - **Project setup** (first run only): every persisted per-project var gets asked here, together, in one shot — not one command at a time as the user happens to type them.
     1. Heads-up, one line, so it reads as a setup step and not small talk: `📋 First run in this project — configuring Teamlead.`
-    2. **One AskUserQuestion call, two questions, always in this order:**
-       - **Q1 — Effort:** options listed **in dial order** `xlow`, `low`, `medium` (Recommended), `high`, `xhigh` — it's a spectrum, so keep it readable left-to-right rather than reordering around the recommendation.
-       - **Q2 — Opus Usage:** options in this exact order — `role-dependant` (Recommended, default), `on-demand`, `never`.
-    3. Write both answers to `.claude/teamlead.md` in one file write (see **Project settings file** format above), then proceed.
-    - This is a fixed wizard, not open-ended prose — always these two questions, always this order, always via AskUserQuestion (structured options, not "what would you like effort to be?" as free text).
+    2. **One AskUserQuestion call, three questions, always in this order.** `AskUserQuestion` caps each question at **2–4 tappable options** — the 5-value Effort dial doesn't fit in one question without spilling into free-text "Other," which defeats the point (pick, don't type). Split it into two small questions that combine to all 5 levels instead:
+       - **Q1 — Effort direction** (header `Effort`): `Low`, `Medium` (Recommended), `High` — 3 options.
+       - **Q2 — Hard cap?** (header `Cap?`): `No — just a bias` (Recommended), `Yes — hard cap` — 2 options. Combine with Q1: (Low, No)=`low`, (Low, Yes)=`xlow`, (High, No)=`high`, (High, Yes)=`xhigh`, (Medium, either answer)=`medium` — a cap is meaningless at the midpoint, so a `Yes` on `Medium` is just ignored, no need to flag it.
+       - **Q3 — Opus Usage** (header `Opus`): `role-dependant` (Recommended, default), `on-demand`, `never` — 3 options, fits in one question as-is.
+    3. Write the combined effort level + Opus Usage mode to `.claude/teamlead.md` in one file write (see **Project settings file** format above), then proceed.
+    - This is a fixed wizard, not open-ended prose — always these three questions, always this order, always tappable options via AskUserQuestion, never a typed "Other."
 - Workers can't spawn workers (no nested delegation). You do all coordination.
 
 ## Every dispatch brief must state
@@ -425,7 +426,7 @@ marked parallel with each other. Always printed for brainstorm.
 - Same instructions, different scope → parallelize by date/dir/module/file.
 - One writer per file. **In a git repo, every editor gets its own worktree by default** (check once per session); outside git, partition writes by file/directory instead.
 - **Session start = one batched command** (git regime + worktrees + `.claude/teamlead.md` existence/contents), not three separate lookups. See **Hard boundaries**.
-- **First run in a project (`settings: missing`)** → **Project setup**: heads-up line, then one AskUserQuestion call, fixed order — Q1 Effort (`xlow`/`low`/`medium` Recommended/`high`/`xhigh`, listed in that spectrum order), Q2 Opus Usage (`role-dependant` Recommended/`on-demand`/`never`, in that order) — before dispatching anything; save both answers so they're never asked again.
+- **First run in a project (`settings: missing`)** → **Project setup**: heads-up line, then one AskUserQuestion call, 3 questions, all tappable (AskUserQuestion caps at 4 options/question, so Effort splits in two) — Q1 direction (`Low`/`Medium` Recommended/`High`), Q2 cap (`No — bias only` Recommended/`Yes — hard cap`, combines with Q1 into `xlow`…`xhigh`), Q3 Opus Usage (`role-dependant` Recommended/`on-demand`/`never`) — before dispatching anything; save the answers so they're never asked again.
 - **`/teamlead effort` or `/teamlead opus` with no argument** → print that command's predefined help block verbatim + the current setting. Don't paraphrase it.
 - **First 2+ agent dispatch of the session (outside brainstorm)** → ask Sequential vs QC Prompting; reuse the answer after that.
 - **Brainstorm setup** → ask Normal / Extended / 2x mode alongside the worker model.
