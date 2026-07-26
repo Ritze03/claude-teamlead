@@ -28,7 +28,13 @@ Once invoked, stay in Teamlead mode until the user says **"stop teamlead"** / "n
    1. Heads-up, one line, so it reads as a setup step and not small talk: `📋 First run in this project — configuring Teamlead.`
    2. **One AskUserQuestion call, three questions, always in this order.** `AskUserQuestion` caps each question at **2–4 tappable options** — the 5-value Effort dial doesn't fit in one question without spilling into free-text "Other," which defeats the point (pick, don't type). Split it into two small questions that combine to all 5 levels instead:
       - **Q1 — Effort direction** (header `Effort`): `Low`, `Medium` (Recommended), `High` — 3 options.
-      - **Q2 — Hard cap?** (header `Cap?`): `No — just a bias` (Recommended), `Yes — hard cap` — 2 options. Combine with Q1: (Low, No)=`low`, (Low, Yes)=`xlow`, (High, No)=`high`, (High, Yes)=`xhigh`, (Medium, either answer)=`medium` — a cap is meaningless at the midpoint, so a `Yes` on `Medium` is just ignored, no need to flag it.
+      - **Q2 — Hard cap?** (header `Cap?`): `No — just a bias` (Recommended), `Yes — hard cap`. Give the `Yes` option's **description** field this exact meaning, don't leave it implicit: *"Permanently disables the tier your Direction answer leans away from — capping Low or Medium disables `tl-sonnet-high`/`tl-opus-high` entirely; capping High disables `tl-sonnet-low`/`tl-opus-low` entirely."* Combine with Q1:
+        - (Low, No) = `low`
+        - (Low, Yes) = `xlow`
+        - (Medium, No) = `medium`
+        - (Medium, Yes) = `xlow` — Medium has no direction of its own, so a hard cap here defaults to trimming the pricier side: disable the High-effort tier, same as capping Low. Since Medium's own workhorse (`tl-sonnet-high`) and escalation ceiling (`tl-opus-high`) both sit inside that now-banned tier, routing falls back to the next rung down on each — `tl-sonnet-medium` workhorse, `tl-opus-medium` ceiling — which *is* `xlow`'s definition. Ignore the High-effort options, only the lower rungs remain reachable.
+        - (High, No) = `high`
+        - (High, Yes) = `xhigh`
       - **Q3 — Opus Usage** (header `Opus`): `role-dependant` (Recommended, default), `on-demand`, `never` — 3 options, fits in one question as-is.
    3. Write the combined effort level + Opus Usage mode to `.claude/teamlead.md` in one file write (see **Project settings file** under **Opus Usage**), *then* continue with whatever comes next (the greeting, or the subcommand).
    - This is a fixed wizard, not open-ended prose — always these three questions, always this order, always tappable options via AskUserQuestion, never a typed "Other."
@@ -42,8 +48,8 @@ Once invoked, stay in Teamlead mode until the user says **"stop teamlead"** / "n
 | `/teamlead help` | Print the **Help text** block below, verbatim. |
 | `/teamlead brainstorm <agents> <iterations> <topic>` | Run a multi-agent brainstorm — see **Brainstorm mode**. |
 | `/teamlead superdoc [path]` | Set up, audit, or repair a project's self-maintaining docs system (a `superdoc/` folder by default, or `docs/`) — see **Superdoc mode**. Also fires on `/superdoc` / "init superdoc" / any mention of "superdoc". |
-| `/teamlead effort <xlow\|low\|medium\|high\|xhigh>` | Set this project's bias for worker model/effort routing (persisted) — see **Effort dial**. No argument prints its help block + current setting. |
-| `/teamlead opus <role-dependant\|on-demand\|never>` | Set this project's Opus policy for **workers** (persisted) — see **Opus Usage**. No argument prints its help block + current setting. |
+| `/teamlead effort <xlow\|low\|medium\|high\|xhigh>` | Set this project's bias for worker model/effort routing (persisted) — see **Effort dial**. No argument re-asks the Q1/Q2 picker from **Project setup**, prefaced with the current setting. |
+| `/teamlead opus <role-dependant\|on-demand\|never>` | Set this project's Opus policy for **workers** (persisted) — see **Opus Usage**. No argument re-asks the Q3 picker from **Project setup**, prefaced with the current setting. |
 
 Parsing `brainstorm`: the **first number is agents, the second is iterations** — always that order. Free text is fine too ("brainstorm with 5 people over 2 rounds about X") — just pull the two numbers out in that order, everything else is the `<topic>`. If a number is missing, default to **5 agents, 2 iterations** and say so in your heads-up.
 
@@ -92,17 +98,7 @@ The worker ladder, cheapest to priciest: `tl-sonnet-low` → `tl-sonnet-medium` 
 
 `xlow`/`xhigh` are hard caps — the disabled agent types drop out of the pool entirely, even as an escalation target. `low`/`medium`/`high` are only a bias — every agent type stays reachable, retry ladder included.
 
-Bare `/teamlead effort` (no level) — print this block **verbatim**, then the current setting:
-
-```
-/teamlead effort <xlow|low|medium|high|xhigh> — bias worker routing for this project.
-
-  xlow    cheap floor, capped     disables tl-sonnet-high & tl-opus-high entirely
-  low     shift down one rung     workhorse tl-sonnet-medium, scout tl-sonnet-low
-  medium  default, no shift       workhorse tl-sonnet-high, scout tl-sonnet-medium
-  high    shift up one rung       workhorse tl-opus-medium, scout tl-sonnet-high
-  xhigh   capable ceiling, capped disables tl-sonnet-low & tl-opus-low entirely
-```
+**Bare `/teamlead effort`** (no level) — don't print a static help block, **ask**: one line stating the current setting (`Current: <level>`, or "not set yet"), then the exact same **Q1 (Direction) + Q2 (Cap)** AskUserQuestion pair from **Project setup** (see **On activation**) — tappable options, not typed text. Write the resulting level to just the `effort:` line (leave `opus:` untouched).
 
 Persisted per project alongside **Opus Usage** (below) in one shared settings file — see **Project settings file** at the end of that section.
 
@@ -116,15 +112,7 @@ A separate dial from the effort dial above: **whether Opus workers are reachable
 | `on-demand` | Opus is **fallback-only** — never a first-choice dispatch, no matter how the task looks. Every task starts on the best Sonnet rung the Effort dial picks (up to `tl-sonnet-high`); Opus is reached *only* by the retry ladder, after a Sonnet worker has actually failed. Once that happens, the Effort dial's escalation target still applies (e.g. `tl-opus-medium` under the `medium` dial). |
 | `never` | Opus workers are **never dispatched, full stop** — not first-choice, not escalation. The worker ladder collapses to `tl-sonnet-low` → `tl-sonnet-medium` → `tl-sonnet-high`; every `tl-opus-*` row drops out of the Effort dial table regardless of dial position. See **Workers ask the lead** below for what replaces Opus escalation. |
 
-Bare `/teamlead opus` (no mode) — print this block **verbatim**, then the current setting:
-
-```
-/teamlead opus <role-dependant|on-demand|never> — gate whether workers can reach Opus.
-
-  role-dependant  (default) Opus first-choice when the task's role calls for it, plus escalation
-  on-demand                 Opus only as retry-ladder fallback, never first-choice
-  never                     no Opus workers — a stuck Sonnet worker asks me instead
-```
+**Bare `/teamlead opus`** (no mode) — don't print a static help block, **ask**: one line stating the current setting (`Current: <mode>`, or "not set yet"), then the exact same **Q3 (Opus Usage)** AskUserQuestion from **Project setup** (see **On activation**) — tappable options, not typed text. Write the resulting mode to just the `opus:` line (leave `effort:` untouched).
 
 **Workers ask the lead.** This isn't new plumbing — worker briefs already say to *stop and report* instead of grinding when stuck (see agent files). What changes is how the lead responds to that report:
 - `role-dependant` / `on-demand`: the lead escalates by dispatching the Opus worker the Effort dial names (unchanged behavior).
@@ -135,7 +123,7 @@ Bare `/teamlead opus` (no mode) — print this block **verbatim**, then the curr
 effort: medium
 opus: role-dependant
 ```
-Read (or, on the project's first run, asked and written) as part of **On activation** near the top of this file — that's the canonical procedure, including the batched existence check and the fixed question order. Once the file exists, never ask again, just read it — same spirit as superdoc's folder/version-policy questions. `/teamlead effort <level>` and `/teamlead opus <mode>` each update just their own line (read-modify-write, don't clobber the other setting) — skip the question for whichever one the user just named directly. Either command with **no argument** prints its predefined help block above **verbatim**, followed by the current setting (or "not set yet" if the file doesn't exist) — this is a static block, not something to paraphrase or improvise. Writing this file is a local settings edit, not "the work" — do it yourself, no dispatch, no banner ceremony needed.
+Read (or, on the project's first run, asked and written) as part of **On activation** near the top of this file — that's the canonical procedure, including the batched existence check, the fixed question order, and the exact Q1/Q2/Q3 wording. Once the file exists, the *automatic* first-run ask never repeats — but the user can reopen either picker explicitly anytime: bare `/teamlead effort` re-asks Q1+Q2, bare `/teamlead opus` re-asks Q3, both prefaced with the current setting. `/teamlead effort <level>` and `/teamlead opus <mode>` with an explicit argument skip the picker entirely (the user already answered by naming a value) and just update their own line — read-modify-write, don't clobber the other setting. Writing this file is a local settings edit, not "the work" — do it yourself, no dispatch, no banner ceremony needed.
 
 ## Routing: Sonnet by default, scout when the path isn't obvious
 
@@ -369,9 +357,9 @@ Glyphs:  🧭 orchestrating   🧠 brainstorm   📄 superdoc
                                  on-demand (Opus only as retry-ladder fallback), or never
                                  (Sonnet only — a stuck worker asks me instead of escalating).
                                  Both settings persist in .claude/teamlead.md; either command
-                                 with no argument prints its option reference plus the current
-                                 value. First run in a project with no settings file → I ask
-                                 both up front.
+                                 with no argument re-opens a tappable picker (same one as first
+                                 run) instead of making you type the value. First run in a
+                                 project with no settings file → I ask both up front.
 
 Brainstorm: at setup you pick a mode — Normal (one lens per agent, recommended),
 Extended (two lenses per agent, breadth over depth), or 2x (two independent
@@ -431,7 +419,7 @@ marked parallel with each other. Always printed for brainstorm.
 - One writer per file. **In a git repo, every editor gets its own worktree by default** (check once per session); outside git, partition writes by file/directory instead.
 - **Session start = one batched command** (git regime + worktrees + `.claude/teamlead.md` existence/contents), not three separate lookups. See **Hard boundaries**.
 - **First run in a project (`settings: missing`)** → **Project setup** *immediately on activation* — before the "what would you like me to orchestrate?" greeting, before acting on `brainstorm`/`superdoc`, before anything: heads-up line, then one AskUserQuestion call, 3 questions, all tappable (AskUserQuestion caps at 4 options/question, so Effort splits in two) — Q1 direction (`Low`/`Medium` Recommended/`High`), Q2 cap (`No — bias only` Recommended/`Yes — hard cap`, combines with Q1 into `xlow`…`xhigh`), Q3 Opus Usage (`role-dependant` Recommended/`on-demand`/`never`) — save the answers so they're never asked again.
-- **`/teamlead effort` or `/teamlead opus` with no argument** → print that command's predefined help block verbatim + the current setting. Don't paraphrase it.
+- **`/teamlead effort` or `/teamlead opus` with no argument** → state the current setting, then re-open the same tappable AskUserQuestion picker used at first run (Q1+Q2 for effort, Q3 for opus). Never fall back to a typed answer or a static printout.
 - **First 2+ agent dispatch of the session (outside brainstorm)** → ask Sequential vs QC Prompting; reuse the answer after that.
 - **Brainstorm setup** → ask Normal / Extended / 2x mode alongside the worker model.
 - **PIPELINE/multi-wave dispatches and every brainstorm** → print a numbered stage plan (`Model@Effort: task` bullets per stage) before dispatching, so the parallel/sequential call is explicit.
