@@ -91,6 +91,15 @@ Note what's **no longer** an automatic Opus ticket: bug fixes, UI logic, and unc
 
 > 🚩 **Tripwires** — "one worker will discover it and handle it" (you merged discovery with execution) · "one keeps it simple" (serial ≠ simple; 1 worker on N units = N× latency) · "don't know the shape yet" (probe, don't default). Independent + similar units → fan out.
 
+## Prompt mode for multi-agent dispatch
+
+The **first** time a dispatch (outside brainstorm mode, which has its own Setup) fans out to **2+ agents** in a session, ask which mode to use — **use the AskUserQuestion tool.** The answer persists for the rest of the session; the user can switch anytime by naming the other mode.
+
+- **Sequential Prompting (Recommended)** — today's behavior: write prompt 1 → dispatch agent 1 → write prompt 2 → dispatch agent 2 → … Each brief is drafted right before its agent starts.
+- **QC Prompting** — write every prompt in the batch first. Then check the whole set against each other yourself: consistent scope boundaries, no gaps or overlaps, compatible assumptions anywhere results need to interlock (shared interfaces, naming, formats). Update any prompt that needs it. Only once the full set is finalized do you dispatch them all (parallel/background, as usual).
+
+Either mode still gets the retry ladder and QC pass after agents return (see below) — this only changes how the *prompts* get written and cross-checked before dispatch.
+
 ## Hard boundaries
 
 - **Never two agents editing the same file.** Concurrent *reading* of one file is fine; concurrent *editing* is not — partition writes by file/directory.
@@ -125,11 +134,21 @@ Let **A** = agents, **I** = iterations (the agent rounds). There is **always one
 ### Setup (once, before round 1)
 1. **Topic + context.** If the topic names a directory/path, every agent reads it. If context is unclear, ask (free text).
 2. **Lenses — overlapping, never silos.** Give each agent a **primary lens** as a *starting angle* — Security, Performance, Extensibility, Reliability, Design/UX, Maintainability, Testing, Cost/Simplicity, … — but tell **every** agent to range across the **whole topic** and weigh in on anything, including other agents' concerns. Overlap is the point: you want several independent opinions on the same questions, not one owner per area. **No single agent's take may close off a decision or a line of thinking.** Pick primary lenses that fit the topic (ask the user if unsure), and deliberately let 2+ agents cover the highest-stakes areas.
-3. **Pick the worker model.** Ask the user which worker type to run the agents on — **use the AskUserQuestion tool here** (this is setup, not the in-session Q&A) — offering all three: `tl-sonnet-high` (**recommended** — Sonnet 5 is strong enough to brainstorm well at a fraction of the cost), `tl-opus-high` (pricier, for when you want maximum depth), `tl-sonnet-medium` (cheapest). Use the chosen type for every brainstorm agent this session. (The single final verify round stays on `tl-opus-high` regardless — one high-stakes reasoning pass.)
+3. **Pick the brainstorm mode and the worker model.** Ask both in one **AskUserQuestion** call (this is setup, not the in-session Q&A):
+   - **Mode:**
+     - **Normal Mode (Recommended)** — today's behavior: each agent gets **one** primary lens and ranges across the whole topic.
+     - **Extended Mode** — each agent gets **two** distinct lenses instead of one, paired round-robin across the lens list (so pairs vary agent to agent, and each lens partners with more than one other where the count allows). Tell the agent to actively reconcile/cross-pollinate between its two lenses, not treat them as separate mini-tasks. This trades per-lens depth for cross-lens synthesis — **breadth over depth**: an agent reasoning at the intersection of two angles surfaces things a single-lens agent would miss, at the cost of less depth on any one lens.
+     - **2x Mode** — one lens per agent as in Normal, but **two independently dispatched agents per lens** — this round dispatches **2×A** agents, not A. Each pair gets the identical single-lens brief and thinks about it with zero shared context — completely independent takes — giving you both single-lens depth *and* a second opinion to diff against. Doubles the token cost of Normal; pick this when thoroughness matters more than price.
+   - **Worker model:** offer all three: `tl-sonnet-high` (**recommended** — Sonnet 5 is strong enough to brainstorm well at a fraction of the cost), `tl-opus-high` (pricier, for when you want maximum depth), `tl-sonnet-medium` (cheapest).
+   Use the chosen mode + model for every round this session. (The single final verify round stays on `tl-opus-high` regardless, and is unaffected by the chosen mode — it's one synthesis pass, not a lens dispatch.)
 
 ### Each round i = 1..I
-1. Heads-up: `🧠 Round i/I — A [model] agents thinking (lenses: …).`
-2. Dispatch A agents **in parallel, background**. Each brief: *"You are one independent person in a brainstorm about `<topic>`, thinking through the **`<lens>`** lens. [Read `<dir>`.] [Previous summary + answers: …]. Return (a) your ideas/critique, (b) **0–5 questions** you'd want answered — only real ones, or none."* Concise, no raw logs.
+1. Heads-up: `🧠 Round i/I — <N> [model] agents thinking (mode: <mode>, lenses: …).` — N is A for Normal/Extended, 2×A for 2x Mode.
+2. Dispatch **in parallel, background**, per the chosen mode:
+   - **Normal:** A agents, each briefed with its one primary lens.
+   - **Extended:** A agents, each briefed with its paired two lenses, told to reconcile between them.
+   - **2x:** 2×A agents — two independently dispatched per lens, each given the identical single-lens brief, run with no visibility into each other.
+   Each brief: *"You are one independent person in a brainstorm about `<topic>`, thinking through the **`<lens(es)>`** lens(es). [Read `<dir>`.] [Previous summary + answers: …]. Return (a) your ideas/critique, (b) **0–5 questions** you'd want answered — only real ones, or none."* Concise, no raw logs.
 3. Collect every agent's questions. **Distill:** drop only exact/near-duplicates; keep the rest. **Err toward asking too many, never too few.**
 4. Ask the user the distilled questions as a **plain numbered list in free text — NEVER the AskUserQuestion tool.** Wait for free-text answers.
 5. Write a **round summary** combining all agent ideas + the answers. It feeds the next round.
@@ -141,9 +160,12 @@ Let **A** = agents, **I** = iterations (the agent rounds). There is **always one
 4. Then **offer to execute** the plan — route the improvements through normal teamlead dispatch.
 
 ### Example — `/teamlead brainstorm 5 2 improve the superdoc skill`
+- **Setup:** user picks Normal Mode + `tl-sonnet-high`.
 - **Round 1:** 5 agents → 18 questions → you distill to 12 → user answers → summary.
 - **Round 2:** 5 agents (given summary + answers) → 9 questions → distill to 3 → user answers → summary.
 - **Final:** 1 Opus-high verifier checks the summary satisfies every answer → report gaps (free text) → save → offer to build.
+
+(Extended Mode would run the same 5 agents each with 2 paired lenses; 2x Mode would dispatch 10 agents per round — 2 per lens.)
 
 ## Superdoc mode
 
@@ -212,11 +234,14 @@ Glyphs:  🧭 orchestrating   🧠 brainstorm   📄 superdoc
                                  docs system (a superdoc/ folder by default, or docs/).
                                  Also fires on /superdoc or "init superdoc".
 
-Brainstorm: each round the agents think through distinct lenses (security,
-performance, design, …) and each brings 0–5 questions. I gather them, ask you
-in plain text between rounds, and write a running summary. A final Opus verifier
-checks everything's covered, then I offer to save it to this project's doc root —
-superdoc/brainstorm/ if superdoc is set up here, else docs/brainstorm/ — and build it.
+Brainstorm: at setup you pick a mode — Normal (one lens per agent, recommended),
+Extended (two lenses per agent, breadth over depth), or 2x (two independent
+agents per lens, best of both worlds, burns more tokens) — and a worker model.
+Each round the agents think through their lens(es) and each brings 0–5 questions.
+I gather them, ask you in plain text between rounds, and write a running summary.
+A final Opus verifier checks everything's covered, then I offer to save it to this
+project's doc root — superdoc/brainstorm/ if superdoc is set up here, else
+docs/brainstorm/ — and build it.
 
 Superdoc: I detect whether the docs tree is fresh, healthy, hand-written, or greenfield.
 Fresh → I ask which folder to use (superdoc/ default, or docs/) and your version policy
@@ -239,6 +264,11 @@ In a git repo, editing agents get their own worktree by default; outside git,
 edits are partitioned by file/directory instead. Before dispatching anything,
 I check for leftover worktrees from a prior session and flag any with
 uncommitted work rather than touching them silently.
+
+The first time I fan out to 2+ agents (outside brainstorm), I'll ask whether
+to write each prompt right before dispatching it (Sequential, recommended) or
+write the whole batch first and cross-check it for consistency before
+dispatching any of them (QC Prompting). Sticks for the rest of the session.
 ```
 
 ## Quick reference
@@ -250,3 +280,5 @@ uncommitted work rather than touching them silently.
 - Same instructions, different scope → parallelize by date/dir/module/file.
 - One writer per file. **In a git repo, every editor gets its own worktree by default** (check once per session); outside git, partition writes by file/directory instead.
 - **Before dispatching anything, check `git worktree list` for leftovers** from a prior/crashed session; flag any with uncommitted or unmerged work to the user instead of touching them.
+- **First 2+ agent dispatch of the session (outside brainstorm)** → ask Sequential vs QC Prompting; reuse the answer after that.
+- **Brainstorm setup** → ask Normal / Extended / 2x mode alongside the worker model.
