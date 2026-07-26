@@ -91,6 +91,33 @@ Note what's **no longer** an automatic Opus ticket: bug fixes, UI logic, and unc
 
 > 🚩 **Tripwires** — "one worker will discover it and handle it" (you merged discovery with execution) · "one keeps it simple" (serial ≠ simple; 1 worker on N units = N× latency) · "don't know the shape yet" (probe, don't default). Independent + similar units → fan out.
 
+## Stage plan — visualize the parallel/sequential call
+
+**Required for brainstorm mode (always) and any PIPELINE or multi-wave dispatch** (dependent stages, or more than one dispatch wave). Optional for a plain single-wave MAP — the one-line heads-up already covers that; draw the tree anyway whenever it clarifies your own reasoning.
+
+Print a numbered **stage plan** before dispatching Stage 1: each stage names what it's for, then lists the agent(s) inside it as `- <Model>@<Effort>: <task>` bullets. This is where the parallel-vs-sequential call gets made *and shown*, not just decided silently:
+
+- Bullets **within one stage** run together — parallel, background.
+- Stages run **sequentially, top to bottom**, unless marked `(parallel with Stage N)` — mark two stages parallel only when neither needs the other's output.
+- A stage can mix models/efforts freely (a Sonnet-high coder next to an Opus-high reasoning pass) — naming each agent's model@effort next to its task makes the split visible at a glance.
+
+```
+Stage 1: Implementing XXXX
+  - Sonnet-5@High: Coding XXXX
+Stage 2: Improving XXXX
+  - Sonnet-5@Medium: Doing UI changes
+  - Opus-5@High: Improving performance on the backend
+Stage 3: QC
+  - Sonnet-5@High: Checking the UI
+  - Opus-5@High: Checking backend work
+Stage 4: Final sign off
+  - Sonnet-5@High: Checking documentation changes
+```
+
+The plan doesn't replace the sizing rules above — it's the visualization of the same decision: name the shape (MAP/PIPELINE/SCOUT-then-FAN/REDUCE/SERIAL), size the count, *then* draw the tree so the split is explicit and reviewable before anything dispatches. Re-draw and re-print it whenever a stage's result changes what comes next (a re-size, a scout turning up new units, a QC failure that reopens a stage).
+
+**Brainstorm always gets one.** Each round is a stage — its A (or 2×A, in 2x Mode) agents are that stage's parallel bullets, one bullet per lens (or lens-pair) with its model@effort. The final verify round is its own last stage (always `tl-opus-high`). Print the full plan once at Setup, right after mode + model are picked, before Round 1 dispatches.
+
 ## Prompt mode for multi-agent dispatch
 
 The **first** time a dispatch (outside brainstorm mode, which has its own Setup) fans out to **2+ agents** in a session, ask which mode to use — **use the AskUserQuestion tool.** The answer persists for the rest of the session; the user can switch anytime by naming the other mode.
@@ -141,6 +168,7 @@ Let **A** = agents, **I** = iterations (the agent rounds). There is **always one
      - **2x Mode** — one lens per agent as in Normal, but **two independently dispatched agents per lens** — this round dispatches **2×A** agents, not A. Each pair gets the identical single-lens brief and thinks about it with zero shared context — completely independent takes — giving you both single-lens depth *and* a second opinion to diff against. Doubles the token cost of Normal; pick this when thoroughness matters more than price.
    - **Worker model:** offer all three: `tl-sonnet-high` (**recommended** — Sonnet 5 is strong enough to brainstorm well at a fraction of the cost), `tl-opus-high` (pricier, for when you want maximum depth), `tl-sonnet-medium` (cheapest).
    Use the chosen mode + model for every round this session. (The single final verify round stays on `tl-opus-high` regardless, and is unaffected by the chosen mode — it's one synthesis pass, not a lens dispatch.)
+4. **Print the stage plan** (see **Stage plan** above) — one stage per round, its bullets being the A (or 2×A) lens dispatches for that round with their model@effort, plus a last stage for the final verify. Print it once, before Round 1 dispatches.
 
 ### Each round i = 1..I
 1. Heads-up: `🧠 Round i/I — <N> [model] agents thinking (mode: <mode>, lenses: …).` — N is A for Normal/Extended, 2×A for 2x Mode.
@@ -160,12 +188,28 @@ Let **A** = agents, **I** = iterations (the agent rounds). There is **always one
 4. Then **offer to execute** the plan — route the improvements through normal teamlead dispatch.
 
 ### Example — `/teamlead brainstorm 5 2 improve the superdoc skill`
-- **Setup:** user picks Normal Mode + `tl-sonnet-high`.
+- **Setup:** user picks Normal Mode + `tl-sonnet-high`. Stage plan printed:
+```
+Stage 1: Round 1 — thinking
+  - Sonnet-5@High: Security lens
+  - Sonnet-5@High: Performance lens
+  - Sonnet-5@High: Extensibility lens
+  - Sonnet-5@High: Design/UX lens
+  - Sonnet-5@High: Maintainability lens
+Stage 2: Round 2 — thinking (given Round 1 summary + answers)
+  - Sonnet-5@High: Security lens
+  - Sonnet-5@High: Performance lens
+  - Sonnet-5@High: Extensibility lens
+  - Sonnet-5@High: Design/UX lens
+  - Sonnet-5@High: Maintainability lens
+Stage 3: Final verify
+  - Opus-5@High: Check summary satisfies every answer
+```
 - **Round 1:** 5 agents → 18 questions → you distill to 12 → user answers → summary.
 - **Round 2:** 5 agents (given summary + answers) → 9 questions → distill to 3 → user answers → summary.
 - **Final:** 1 Opus-high verifier checks the summary satisfies every answer → report gaps (free text) → save → offer to build.
 
-(Extended Mode would run the same 5 agents each with 2 paired lenses; 2x Mode would dispatch 10 agents per round — 2 per lens.)
+(Extended Mode would run the same 5 agents each with 2 paired lenses; 2x Mode would dispatch 10 agents per round — 2 per lens — doubling every "Round" stage's bullet count.)
 
 ## Superdoc mode
 
@@ -237,9 +281,11 @@ Glyphs:  🧭 orchestrating   🧠 brainstorm   📄 superdoc
 Brainstorm: at setup you pick a mode — Normal (one lens per agent, recommended),
 Extended (two lenses per agent, breadth over depth), or 2x (two independent
 agents per lens, best of both worlds, burns more tokens) — and a worker model.
-Each round the agents think through their lens(es) and each brings 0–5 questions.
-I gather them, ask you in plain text between rounds, and write a running summary.
-A final Opus verifier checks everything's covered, then I offer to save it to this
+I then print a stage plan (one stage per round, each agent's model@effort
+listed against its lens) before Round 1 dispatches. Each round the agents
+think through their lens(es) and each brings 0–5 questions. I gather them,
+ask you in plain text between rounds, and write a running summary. A final
+Opus verifier checks everything's covered, then I offer to save it to this
 project's doc root — superdoc/brainstorm/ if superdoc is set up here, else
 docs/brainstorm/ — and build it.
 
@@ -269,6 +315,11 @@ The first time I fan out to 2+ agents (outside brainstorm), I'll ask whether
 to write each prompt right before dispatching it (Sequential, recommended) or
 write the whole batch first and cross-check it for consistency before
 dispatching any of them (QC Prompting). Sticks for the rest of the session.
+
+For PIPELINE work or multi-wave dispatches, I print a stage plan first: a
+numbered list of stages, each with its agent(s) as "Model@Effort: task"
+bullets — bullets in one stage run in parallel, stages run in order unless
+marked parallel with each other. Always printed for brainstorm.
 ```
 
 ## Quick reference
@@ -282,3 +333,4 @@ dispatching any of them (QC Prompting). Sticks for the rest of the session.
 - **Before dispatching anything, check `git worktree list` for leftovers** from a prior/crashed session; flag any with uncommitted or unmerged work to the user instead of touching them.
 - **First 2+ agent dispatch of the session (outside brainstorm)** → ask Sequential vs QC Prompting; reuse the answer after that.
 - **Brainstorm setup** → ask Normal / Extended / 2x mode alongside the worker model.
+- **PIPELINE/multi-wave dispatches and every brainstorm** → print a numbered stage plan (`Model@Effort: task` bullets per stage) before dispatching, so the parallel/sequential call is explicit.
