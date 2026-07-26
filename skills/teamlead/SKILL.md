@@ -20,8 +20,8 @@ Once invoked, stay in Teamlead mode until the user says **"stop teamlead"** / "n
 | `/teamlead help` | Print the **Help text** block below, verbatim. |
 | `/teamlead brainstorm <agents> <iterations> <topic>` | Run a multi-agent brainstorm — see **Brainstorm mode**. |
 | `/teamlead superdoc [path]` | Set up, audit, or repair a project's self-maintaining docs system (a `superdoc/` folder by default, or `docs/`) — see **Superdoc mode**. Also fires on `/superdoc` / "init superdoc" / any mention of "superdoc". |
-| `/teamlead effort <xlow\|low\|medium\|high\|xhigh>` | Set this project's bias for worker model/effort routing (persisted) — see **Effort dial**. No argument reports the current setting. |
-| `/teamlead opus <role-dependant\|on-demand\|never>` | Set this project's Opus policy for **workers** (persisted) — see **Opus Usage**. No argument reports the current setting. |
+| `/teamlead effort <xlow\|low\|medium\|high\|xhigh>` | Set this project's bias for worker model/effort routing (persisted) — see **Effort dial**. No argument prints its help block + current setting. |
+| `/teamlead opus <role-dependant\|on-demand\|never>` | Set this project's Opus policy for **workers** (persisted) — see **Opus Usage**. No argument prints its help block + current setting. |
 
 Parsing `brainstorm`: the **first number is agents, the second is iterations** — always that order. Free text is fine too ("brainstorm with 5 people over 2 rounds about X") — just pull the two numbers out in that order, everything else is the `<topic>`. If a number is missing, default to **5 agents, 2 iterations** and say so in your heads-up.
 
@@ -70,6 +70,18 @@ The worker ladder, cheapest to priciest: `tl-sonnet-low` → `tl-sonnet-medium` 
 
 `xlow`/`xhigh` are hard caps — the disabled agent types drop out of the pool entirely, even as an escalation target. `low`/`medium`/`high` are only a bias — every agent type stays reachable, retry ladder included.
 
+Bare `/teamlead effort` (no level) — print this block **verbatim**, then the current setting:
+
+```
+/teamlead effort <xlow|low|medium|high|xhigh> — bias worker routing for this project.
+
+  xlow    cheap floor, capped     disables tl-sonnet-high & tl-opus-high entirely
+  low     shift down one rung     workhorse tl-sonnet-medium, scout tl-sonnet-low
+  medium  default, no shift       workhorse tl-sonnet-high, scout tl-sonnet-medium
+  high    shift up one rung       workhorse tl-opus-medium, scout tl-sonnet-high
+  xhigh   capable ceiling, capped disables tl-sonnet-low & tl-opus-low entirely
+```
+
 Persisted per project alongside **Opus Usage** (below) in one shared settings file — see **Project settings file** at the end of that section.
 
 ## Opus Usage — `/teamlead opus <mode>`
@@ -82,6 +94,16 @@ A separate dial from the effort dial above: **whether Opus workers are reachable
 | `on-demand` | Opus is **fallback-only** — never a first-choice dispatch, no matter how the task looks. Every task starts on the best Sonnet rung the Effort dial picks (up to `tl-sonnet-high`); Opus is reached *only* by the retry ladder, after a Sonnet worker has actually failed. Once that happens, the Effort dial's escalation target still applies (e.g. `tl-opus-medium` under the `medium` dial). |
 | `never` | Opus workers are **never dispatched, full stop** — not first-choice, not escalation. The worker ladder collapses to `tl-sonnet-low` → `tl-sonnet-medium` → `tl-sonnet-high`; every `tl-opus-*` row drops out of the Effort dial table regardless of dial position. See **Workers ask the lead** below for what replaces Opus escalation. |
 
+Bare `/teamlead opus` (no mode) — print this block **verbatim**, then the current setting:
+
+```
+/teamlead opus <role-dependant|on-demand|never> — gate whether workers can reach Opus.
+
+  role-dependant  (default) Opus first-choice when the task's role calls for it, plus escalation
+  on-demand                 Opus only as retry-ladder fallback, never first-choice
+  never                     no Opus workers — a stuck Sonnet worker asks me instead
+```
+
 **Workers ask the lead.** This isn't new plumbing — worker briefs already say to *stop and report* instead of grinding when stuck (see agent files). What changes is how the lead responds to that report:
 - `role-dependant` / `on-demand`: the lead escalates by dispatching the Opus worker the Effort dial names (unchanged behavior).
 - `never`: there's no Opus worker to dispatch, so the lead reasons through the *specific* blocking question itself — not the whole task, just the one decision the worker got stuck on — then hands that answer back to a Sonnet worker (same or fresh) in its next brief. This is a narrow, explicit exception to "never do the work yourself": answering one targeted question to unblock a worker is not the same as doing the worker's job. If the lead can't resolve it either, surface it to the user rather than guessing.
@@ -91,7 +113,7 @@ A separate dial from the effort dial above: **whether Opus workers are reachable
 effort: medium
 opus: role-dependant
 ```
-Read both as part of the session-start check below (once per session, or again if the working directory changes). **First run in a project (file missing) → ask both**, one **AskUserQuestion** call with two questions (effort levels, `medium` Recommended; Opus Usage modes, `role-dependant` Recommended), before dispatching anything else — then write the file. Once it exists, never ask again, just read it — same spirit as superdoc's folder/version-policy questions. `/teamlead effort <level>` and `/teamlead opus <mode>` each update just their own line (read-modify-write, don't clobber the other setting) — skip the question for whichever one the user just named directly. Either command with no argument reports its current setting (or "not set yet" if the file doesn't exist). Writing this file is a local settings edit, not "the work" — do it yourself, no dispatch, no banner ceremony needed.
+Read (or, on the project's first run, asked and written) as part of the **Session-start check → Project setup** flow in **Hard boundaries** below — that's the canonical procedure, including the batched existence check and the fixed question order. Once the file exists, never ask again, just read it — same spirit as superdoc's folder/version-policy questions. `/teamlead effort <level>` and `/teamlead opus <mode>` each update just their own line (read-modify-write, don't clobber the other setting) — skip the question for whichever one the user just named directly. Either command with **no argument** prints its predefined help block above **verbatim**, followed by the current setting (or "not set yet" if the file doesn't exist) — this is a static block, not something to paraphrase or improvise. Writing this file is a local settings edit, not "the work" — do it yourself, no dispatch, no banner ceremony needed.
 
 ## Routing: Sonnet by default, scout when the path isn't obvious
 
@@ -173,11 +195,23 @@ Either mode still gets the retry ladder and QC pass after agents return (see bel
 
 - **Never two agents editing the same file.** Concurrent *reading* of one file is fine; concurrent *editing* is not — partition writes by file/directory.
 - **Session-start check (once per session, before dispatching anything — do it yourself):**
-  1. `git rev-parse --is-inside-work-tree` (or equivalent) — tells you which regime applies below. Re-check if the working directory changes.
-  2. Inside a git repo, also run `git worktree list` to catch **leftover worktrees** from a prior or crashed session. For each one found: check whether it holds uncommitted or unmerged work (`git -C <path> status`, `git log <branch> --not <main-branch>`). Work present → surface it to the user and ask whether to integrate, keep, or discard it — never remove it silently. Clean/already-merged → safe to `git worktree remove`, but still confirm before doing so unless the user has pre-authorized cleanup.
-  3. Check for `.claude/teamlead.md`. Present → read it and apply that **effort dial** level and **Opus Usage** mode (see above) for the rest of the session, no need to mention it. Missing → this is the project's first run, so **ask both** (one AskUserQuestion call, two questions — `medium` / `role-dependant` Recommended) before dispatching anything else, then write the answer to the file.
-  - **Inside a git repo → worktree isolation is the default for every editing agent**, not just concurrent ones. Dispatch any agent that will write files with `isolation: worktree`; it works in its own worktree/branch, and you integrate (merge/apply) each branch back as it lands. Read-only research/scout agents don't need it.
-  - **Not a git repo → fall back to the current behavior:** worktree isolation isn't available, so partition writes by file/directory so no two agents touch the same file, and keep research/reading agents separate from the ones editing.
+  1. **One batched command**, not three separate lookups — run it verbatim (adjust nothing but the working dir if it changes):
+     ```bash
+     git rev-parse --is-inside-work-tree 2>/dev/null && { echo "git: yes"; git worktree list; } || echo "git: no"
+     test -f .claude/teamlead.md && { echo "settings: present"; cat .claude/teamlead.md; } || echo "settings: missing"
+     ```
+     One tool call, concise output, tells you everything the next two steps need: git regime, any leftover worktrees, and whether project settings exist. Re-run it if the working directory changes mid-session.
+  2. **`git: yes` + worktrees listed** → for each one found, check whether it holds uncommitted or unmerged work (`git -C <path> status`, `git log <branch> --not <main-branch>`). Work present → surface it to the user and ask whether to integrate, keep, or discard it — never remove it silently. Clean/already-merged → safe to `git worktree remove`, but still confirm before doing so unless the user has pre-authorized cleanup.
+     - **`git: yes` → worktree isolation is the default for every editing agent**, not just concurrent ones. Dispatch any agent that will write files with `isolation: worktree`; it works in its own worktree/branch, and you integrate (merge/apply) each branch back as it lands. Read-only research/scout agents don't need it.
+     - **`git: no` → fall back to the current behavior:** worktree isolation isn't available, so partition writes by file/directory so no two agents touch the same file, and keep research/reading agents separate from the ones editing.
+  3. **`settings: present`** → apply the **effort dial** level and **Opus Usage** mode already read (from the batched command's output) for the rest of the session, no need to mention it. **`settings: missing`** → this is the project's first run — run **Project setup** below before dispatching anything else.
+  - **Project setup** (first run only): every persisted per-project var gets asked here, together, in one shot — not one command at a time as the user happens to type them.
+    1. Heads-up, one line, so it reads as a setup step and not small talk: `📋 First run in this project — configuring Teamlead.`
+    2. **One AskUserQuestion call, two questions, always in this order:**
+       - **Q1 — Effort:** options listed **in dial order** `xlow`, `low`, `medium` (Recommended), `high`, `xhigh` — it's a spectrum, so keep it readable left-to-right rather than reordering around the recommendation.
+       - **Q2 — Opus Usage:** options in this exact order — `role-dependant` (Recommended, default), `on-demand`, `never`.
+    3. Write both answers to `.claude/teamlead.md` in one file write (see **Project settings file** format above), then proceed.
+    - This is a fixed wizard, not open-ended prose — always these two questions, always this order, always via AskUserQuestion (structured options, not "what would you like effort to be?" as free text).
 - Workers can't spawn workers (no nested delegation). You do all coordination.
 
 ## Every dispatch brief must state
@@ -330,8 +364,9 @@ Glyphs:  🧭 orchestrating   🧠 brainstorm   📄 superdoc
                                  on-demand (Opus only as retry-ladder fallback), or never
                                  (Sonnet only — a stuck worker asks me instead of escalating).
                                  Both settings persist in .claude/teamlead.md; either command
-                                 with no argument reports its current value. First run in a
-                                 project with no settings file → I ask both up front.
+                                 with no argument prints its option reference plus the current
+                                 value. First run in a project with no settings file → I ask
+                                 both up front.
 
 Brainstorm: at setup you pick a mode — Normal (one lens per agent, recommended),
 Extended (two lenses per agent, breadth over depth), or 2x (two independent
@@ -389,8 +424,9 @@ marked parallel with each other. Always printed for brainstorm.
 - **Opus Usage `never`** → no Opus workers at all; a stuck Sonnet worker asks the lead (report the specific blocker), the lead reasons through just that question, then re-briefs Sonnet.
 - Same instructions, different scope → parallelize by date/dir/module/file.
 - One writer per file. **In a git repo, every editor gets its own worktree by default** (check once per session); outside git, partition writes by file/directory instead.
-- **Before dispatching anything, check `git worktree list` for leftovers** from a prior/crashed session; flag any with uncommitted or unmerged work to the user instead of touching them.
-- **First run in a project (no `.claude/teamlead.md`)** → ask both Effort dial (xlow/low/medium/high/xhigh, medium Recommended) and Opus Usage (role-dependant/on-demand/never, role-dependant Recommended) before dispatching anything; save the answers so they're never asked again.
+- **Session start = one batched command** (git regime + worktrees + `.claude/teamlead.md` existence/contents), not three separate lookups. See **Hard boundaries**.
+- **First run in a project (`settings: missing`)** → **Project setup**: heads-up line, then one AskUserQuestion call, fixed order — Q1 Effort (`xlow`/`low`/`medium` Recommended/`high`/`xhigh`, listed in that spectrum order), Q2 Opus Usage (`role-dependant` Recommended/`on-demand`/`never`, in that order) — before dispatching anything; save both answers so they're never asked again.
+- **`/teamlead effort` or `/teamlead opus` with no argument** → print that command's predefined help block verbatim + the current setting. Don't paraphrase it.
 - **First 2+ agent dispatch of the session (outside brainstorm)** → ask Sequential vs QC Prompting; reuse the answer after that.
 - **Brainstorm setup** → ask Normal / Extended / 2x mode alongside the worker model.
 - **PIPELINE/multi-wave dispatches and every brainstorm** → print a numbered stage plan (`Model@Effort: task` bullets per stage) before dispatching, so the parallel/sequential call is explicit.
