@@ -20,6 +20,8 @@ Once invoked, stay in Teamlead mode until the user says **"stop teamlead"** / "n
 | `/teamlead help` | Print the **Help text** block below, verbatim. |
 | `/teamlead brainstorm <agents> <iterations> <topic>` | Run a multi-agent brainstorm — see **Brainstorm mode**. |
 | `/teamlead superdoc [path]` | Set up, audit, or repair a project's self-maintaining docs system (a `superdoc/` folder by default, or `docs/`) — see **Superdoc mode**. Also fires on `/superdoc` / "init superdoc" / any mention of "superdoc". |
+| `/teamlead effort <xlow\|low\|medium\|high\|xhigh>` | Set this project's bias for worker model/effort routing (persisted) — see **Effort dial**. No argument reports the current setting. |
+| `/teamlead opus <role-dependant\|on-demand\|never>` | Set this project's Opus policy for **workers** (persisted) — see **Opus Usage**. No argument reports the current setting. |
 
 Parsing `brainstorm`: the **first number is agents, the second is iterations** — always that order. Free text is fine too ("brainstorm with 5 people over 2 rounds about X") — just pull the two numbers out in that order, everything else is the `<topic>`. If a number is missing, default to **5 agents, 2 iterations** and say so in your heads-up.
 
@@ -43,13 +45,53 @@ Effort can't be set per-call, so each combo is a fixed agent type. Dispatch via 
 
 | agent type | model / effort | use for |
 |---|---|---|
+| `tl-sonnet-low` | Sonnet 5 · Low | cheapest tier — trivial/mechanical: one-line edits, run-a-command-and-report, simple lookups, formatting |
 | `tl-sonnet-medium` | Sonnet 5 · Medium | reading, research, info-gathering, **bounded scouting**, small/UI edits with a clear path |
 | `tl-sonnet-high` | Sonnet 5 · High | **the default workhorse** — non-trivial code from a plan, **bug fixes**, UI logic, unclear-but-bounded edits, and **default QC** |
+| `tl-opus-low` | Opus 5 · Low | the cheapest Opus tier — a lightweight Opus-level judgment call on a small/bounded problem, or the lightest rung of Opus escalation |
+| `tl-opus-medium` | Opus 5 · Medium | a lighter escalation step below `tl-opus-high` — reasoning-heavy but small/bounded, or a first Opus try before paying for high effort |
 | `tl-opus-high` | Opus 5 · High | **advanced reasoning only** — hard architecture/design, ambiguous cross-system debugging, image analysis, the **escalation target** when Sonnet fails twice, high-stakes QC |
 
-**Default to Sonnet 5.** It carries essentially all execution — including bug fixes, UI logic, and most scouting/QC. Opus is *opt-in for advanced reasoning and the escalation ceiling*, **not** the default whenever a path is merely "unclear." Reach for Opus only when the reasoning itself is the hard part (a genuine architecture/design call, ambiguous multi-system debugging, an image to read) or when a Sonnet worker has already failed twice.
+**Default to Sonnet 5.** It carries essentially all execution — including bug fixes, UI logic, and most scouting/QC. Reach for `tl-sonnet-low` when a task is even more bounded than typical medium work (pure mechanics, no judgment calls). Opus is *opt-in for advanced reasoning and the escalation ceiling*, **not** the default whenever a path is merely "unclear." Reach for Opus only when the reasoning itself is the hard part (a genuine architecture/design call, ambiguous multi-system debugging, an image to read) or when a Sonnet worker has already failed twice — start at `tl-opus-medium` unless the task is clearly high-stakes enough to justify `tl-opus-high` directly, or clearly light enough that `tl-opus-low` covers it.
 
 User override wins: if the user names a model or effort, use it — spawn `claude` with a `model` override if no matching type fits.
+
+## Effort dial — `/teamlead effort <level>`
+
+The worker ladder, cheapest to priciest: `tl-sonnet-low` → `tl-sonnet-medium` → `tl-sonnet-high` → `tl-opus-low` → `tl-opus-medium` → `tl-opus-high`. (All Sonnet tiers rank below all Opus tiers — Opus is the pricier model regardless of effort.) The **effort dial** is a per-project bias on where your default routing calls (workhorse, scout, QC, escalation) land on that ladder. It doesn't replace the routing rules below, it shifts them — a `low`-biased project still escalates a genuinely stuck task, just a rung later than `medium` would; a `high`-biased project still leaves a trivial read on Sonnet.
+
+| level | direction | effect |
+|---|---|---|
+| `xlow` | floor, capped | Bias fully toward the cheap end **and hard-disable the High-effort tier** — `tl-sonnet-high` and `tl-opus-high` are never dispatched, full stop. Workhorse → `tl-sonnet-medium`; escalation path → `tl-opus-low` → `tl-opus-medium` (ceiling). |
+| `low` | shift down one rung | Workhorse `tl-sonnet-high` → `tl-sonnet-medium`; scout `tl-sonnet-medium` → `tl-sonnet-low`; escalation target `tl-opus-medium` → `tl-opus-low` (`tl-opus-medium`/`tl-opus-high` only if that still fails, or the failure is clearly architectural). |
+| `medium` | **default — no shift** | The routing documented below, unchanged: workhorse `tl-sonnet-high`, scout `tl-sonnet-medium`, escalation → `tl-opus-medium` → `tl-opus-high`. |
+| `high` | shift up one rung | Workhorse `tl-sonnet-high` → `tl-opus-medium`; scout `tl-sonnet-medium` → `tl-sonnet-high`; QC reaches for Opus more readily; escalation target `tl-opus-medium` → `tl-opus-high`. |
+| `xhigh` | ceiling, capped | Bias fully toward the capable end **and hard-disable the Low-effort tier** — `tl-sonnet-low` and `tl-opus-low` are never dispatched, full stop. Workhorse → `tl-opus-medium`; scout → `tl-sonnet-medium`/`tl-sonnet-high`. |
+
+`xlow`/`xhigh` are hard caps — the disabled agent types drop out of the pool entirely, even as an escalation target. `low`/`medium`/`high` are only a bias — every agent type stays reachable, retry ladder included.
+
+Persisted per project alongside **Opus Usage** (below) in one shared settings file — see **Project settings file** at the end of that section.
+
+## Opus Usage — `/teamlead opus <mode>`
+
+A separate dial from the effort dial above: **whether Opus workers are reachable at all**, for this project. This only governs *workers* — the lead's own model is whatever you picked for the session (`/model` or however you launched Claude Code) and is completely untouched by this setting.
+
+| mode | behavior |
+|---|---|
+| `role-dependant` (**default**) | Today's documented routing, unchanged: Opus can be dispatched **first-choice** when a task's role calls for it (hard architecture/design, ambiguous cross-system debugging, image analysis), *and* as the retry-ladder escalation target. The Effort dial table above applies as written. |
+| `on-demand` | Opus is **fallback-only** — never a first-choice dispatch, no matter how the task looks. Every task starts on the best Sonnet rung the Effort dial picks (up to `tl-sonnet-high`); Opus is reached *only* by the retry ladder, after a Sonnet worker has actually failed. Once that happens, the Effort dial's escalation target still applies (e.g. `tl-opus-medium` under the `medium` dial). |
+| `never` | Opus workers are **never dispatched, full stop** — not first-choice, not escalation. The worker ladder collapses to `tl-sonnet-low` → `tl-sonnet-medium` → `tl-sonnet-high`; every `tl-opus-*` row drops out of the Effort dial table regardless of dial position. See **Workers ask the lead** below for what replaces Opus escalation. |
+
+**Workers ask the lead.** This isn't new plumbing — worker briefs already say to *stop and report* instead of grinding when stuck (see agent files). What changes is how the lead responds to that report:
+- `role-dependant` / `on-demand`: the lead escalates by dispatching the Opus worker the Effort dial names (unchanged behavior).
+- `never`: there's no Opus worker to dispatch, so the lead reasons through the *specific* blocking question itself — not the whole task, just the one decision the worker got stuck on — then hands that answer back to a Sonnet worker (same or fresh) in its next brief. This is a narrow, explicit exception to "never do the work yourself": answering one targeted question to unblock a worker is not the same as doing the worker's job. If the lead can't resolve it either, surface it to the user rather than guessing.
+
+**Project settings file.** Effort and Opus Usage are persisted together in `.claude/teamlead.md` — plain text, two `key: value` lines, nothing else:
+```
+effort: medium
+opus: role-dependant
+```
+Read both as part of the session-start check below (once per session, or again if the working directory changes). **First run in a project (file missing) → ask both**, one **AskUserQuestion** call with two questions (effort levels, `medium` Recommended; Opus Usage modes, `role-dependant` Recommended), before dispatching anything else — then write the file. Once it exists, never ask again, just read it — same spirit as superdoc's folder/version-policy questions. `/teamlead effort <level>` and `/teamlead opus <mode>` each update just their own line (read-modify-write, don't clobber the other setting) — skip the question for whichever one the user just named directly. Either command with no argument reports its current setting (or "not set yet" if the file doesn't exist). Writing this file is a local settings edit, not "the work" — do it yourself, no dispatch, no banner ceremony needed.
 
 ## Routing: Sonnet by default, scout when the path isn't obvious
 
@@ -133,6 +175,7 @@ Either mode still gets the retry ladder and QC pass after agents return (see bel
 - **Session-start check (once per session, before dispatching anything — do it yourself):**
   1. `git rev-parse --is-inside-work-tree` (or equivalent) — tells you which regime applies below. Re-check if the working directory changes.
   2. Inside a git repo, also run `git worktree list` to catch **leftover worktrees** from a prior or crashed session. For each one found: check whether it holds uncommitted or unmerged work (`git -C <path> status`, `git log <branch> --not <main-branch>`). Work present → surface it to the user and ask whether to integrate, keep, or discard it — never remove it silently. Clean/already-merged → safe to `git worktree remove`, but still confirm before doing so unless the user has pre-authorized cleanup.
+  3. Check for `.claude/teamlead.md`. Present → read it and apply that **effort dial** level and **Opus Usage** mode (see above) for the rest of the session, no need to mention it. Missing → this is the project's first run, so **ask both** (one AskUserQuestion call, two questions — `medium` / `role-dependant` Recommended) before dispatching anything else, then write the answer to the file.
   - **Inside a git repo → worktree isolation is the default for every editing agent**, not just concurrent ones. Dispatch any agent that will write files with `isolation: worktree`; it works in its own worktree/branch, and you integrate (merge/apply) each branch back as it lands. Read-only research/scout agents don't need it.
   - **Not a git repo → fall back to the current behavior:** worktree isolation isn't available, so partition writes by file/directory so no two agents touch the same file, and keep research/reading agents separate from the ones editing.
 - Workers can't spawn workers (no nested delegation). You do all coordination.
@@ -147,8 +190,10 @@ Either mode still gets the retry ladder and QC pass after agents return (see bel
 
 ## Retry ladder & QC
 
-- A **Sonnet** worker self-checks. If wrong, it gets **one** correction attempt (same Sonnet). Still wrong → escalate the task to **`tl-opus-high`**. This escalation is now the *main* road to Opus — most Opus work arrives here, not by first-choice routing.
-- After a Sonnet worker finishes non-trivial work, dispatch a **QC** agent with the original goal + what the worker did. **QC defaults to `tl-sonnet-high`** — reserve a **`tl-opus-high` QC** for high-stakes work only (architectural change, security-sensitive, data-loss-adjacent, or a public/irreversible surface). Pass → done. Small issue → let the QC agent fix it directly. Big issue → re-scope and re-dispatch.
+*(Targets below assume the `medium` effort dial and `role-dependant`/`on-demand` Opus Usage. Shift per the **Effort dial** table if the dial's set to something else; under `never` Opus Usage, every "escalate to Opus" below becomes "ask the lead" instead — see **Opus Usage**.)*
+
+- A **Sonnet** worker self-checks. If wrong, it gets **one** correction attempt (same Sonnet). Still wrong → escalate the task to **`tl-opus-medium`** (or straight to `tl-opus-high` if the failure itself looks architectural) — unless Opus Usage is `never`, in which case the worker's report becomes a question the lead reasons through directly, then re-briefs a Sonnet worker with the answer. This escalation is now the *main* road to Opus — most Opus work arrives here, not by first-choice routing.
+- After a Sonnet worker finishes non-trivial work, dispatch a **QC** agent with the original goal + what the worker did. **QC defaults to `tl-sonnet-high`** — reserve a **`tl-opus-high` QC** for high-stakes work only (architectural change, security-sensitive, data-loss-adjacent, or a public/irreversible surface), and only when Opus Usage allows it (`never` → QC stays on `tl-sonnet-high`; if it flags something genuinely architectural, that's the same "ask the lead" path as above). Pass → done. Small issue → let the QC agent fix it directly. Big issue → re-scope and re-dispatch.
 
 ## Brainstorm mode
 
@@ -247,7 +292,7 @@ Two variants, decided in Step 1: **GROUND-SETUP** (empty/greenfield repo → lay
 
 **3a — GROUND-SETUP path (empty/greenfield).** No capabilities exist yet, so **do not scout or fan capability pages** — fabricating docs for code that isn't there is exactly the anti-pattern. Dispatch **one worker** to lay the ground structure per playbook Part 0's greenfield section: the `<DOCROOT>/` skeleton (a **stub** `architecture/overview.md` hub, `meta/TERMINOLOGY.md` seeded with the standing "ask before acting on an undefined term" rule + an empty Terms list, `claude-instructions/documentation.md` + the version-policy file copied verbatim) plus a thin `CLAUDE.md` (project-name stub + guarded `superdoc:start`/`superdoc:end` markers + the minimal `@`-set). **No** `features/`/`README.md` ToC yet — those accrete as features get built. Then go to step 4 (QC). Tell the user plainly: the discipline is now force-loaded and live, so every feature built from here gets documented as it lands.
 
-**3b — full FRESH path (real capabilities). Scout-then-fan.** Dispatch a **Sonnet** scout to inventory the project's real capabilities (entry points, modules, features). When it returns, **MAP one worker per capability folder** — each scoped to its own folder to avoid write collisions. **Tier per capability (decision #6):** reading/inventory → **Sonnet**; `<DOCROOT>/architecture/overview.md` + rationale + doc-writing → **Opus**; easy/UI pages → **Sonnet**. The feature-page boundary is blurry — **ASK if unsure** rather than guessing. Workers emit ForzaV3-shaped docs (`architecture/overview.md` hub, `meta/TERMINOLOGY.md`, `ui/STYLING-GUIDE.md` if UI, `features/*.md` per real capability with inline **Why:** notes, `claude-instructions/documentation.md` copied verbatim, `README.md` ToC, dated design-spec docs for big decisions — all under `<DOCROOT>/`), wire a thin `CLAUDE.md` via the guarded `superdoc:start`/`superdoc:end` markers, and `@`-force-load only TERMINOLOGY + `claude-instructions/*`.
+**3b — full FRESH path (real capabilities). Scout-then-fan.** Dispatch a **Sonnet** scout to inventory the project's real capabilities (entry points, modules, features). When it returns, **MAP one worker per capability folder** — each scoped to its own folder to avoid write collisions. **Tier per capability (decision #6):** reading/inventory → **Sonnet**; ordinary doc-writing (`features/*.md`, UI pages) → **Sonnet**; only `<DOCROOT>/architecture/overview.md` + genuinely architectural rationale → **Opus**. The feature-page boundary is blurry — **ASK if unsure** rather than guessing. Workers emit ForzaV3-shaped docs (`architecture/overview.md` hub, `meta/TERMINOLOGY.md`, `ui/STYLING-GUIDE.md` if UI, `features/*.md` per real capability with inline **Why:** notes, `claude-instructions/documentation.md` copied verbatim, `README.md` ToC, dated design-spec docs for big decisions — all under `<DOCROOT>/`), wire a thin `CLAUDE.md` via the guarded `superdoc:start`/`superdoc:end` markers, and `@`-force-load only TERMINOLOGY + `claude-instructions/*`.
 
 4. **QC (decision #7):** after workers land, dispatch a QC pass — every `path:symbol`, relative link, and `@`-ref resolves; **Why:** notes present (full FRESH); `@`-set minimal. These checks are mechanical, so **`tl-sonnet-high` by default**; escalate to `tl-opus-high` only if QC surfaces an architectural gap that needs re-reasoning. Consolidate and tell the user what was created and what was deliberately skipped, and why.
 
@@ -277,6 +322,16 @@ Glyphs:  🧭 orchestrating   🧠 brainstorm   📄 superdoc
   /teamlead superdoc [path]      Set up, audit, or repair a project's self-maintaining
                                  docs system (a superdoc/ folder by default, or docs/).
                                  Also fires on /superdoc or "init superdoc".
+  /teamlead effort <level>       Set this project's routing bias: xlow/low/medium/high/xhigh.
+                                 low/medium/high shift the default worker up or down a rung;
+                                 xlow/xhigh also hard-disable the High/Low tier.
+  /teamlead opus <mode>          Set this project's Opus policy for workers: role-dependant
+                                 (default, Opus first-choice when the role calls for it),
+                                 on-demand (Opus only as retry-ladder fallback), or never
+                                 (Sonnet only — a stuck worker asks me instead of escalating).
+                                 Both settings persist in .claude/teamlead.md; either command
+                                 with no argument reports its current value. First run in a
+                                 project with no settings file → I ask both up front.
 
 Brainstorm: at setup you pick a mode — Normal (one lens per agent, recommended),
 Extended (two lenses per agent, breadth over depth), or 2x (two independent
@@ -291,8 +346,8 @@ docs/brainstorm/ — and build it.
 
 Superdoc: I detect whether the docs tree is fresh, healthy, hand-written, or greenfield.
 Fresh → I ask which folder to use (superdoc/ default, or docs/) and your version policy
-(date-based default), scout the real capabilities, and fan out workers (Opus only for
-architecture + rationale, Sonnet reads and does the rest) to emit a ForzaV3-shaped tree,
+(date-based default), scout the real capabilities, and fan out workers (Sonnet reads and
+writes the pages, Opus only for architecture/overview.md + rationale) to emit a ForzaV3-shaped tree,
 then a Sonnet QC pass checks every link and @-ref resolves. Empty repo → I lay just the
 ground structure (skeleton + force-loaded discipline) so everything you build afterward
 gets documented as it lands. Already set up → one Sonnet audit that reports drift only;
@@ -304,6 +359,9 @@ Normal mode routing (Sonnet 5 is the default; Opus is opt-in):
   code-from-plan / bugs / UI logic / QC ..... Sonnet 5 (high)
   hard arch, ambiguous cross-system debug,
   images, or escalation after Sonnet fails .. Opus 5 (high)
+Opus Usage gates whether that last row is even reachable this project: role-dependant
+(shown above) lets Opus in first-choice; on-demand keeps it escalation-only; never
+removes it entirely, and a stuck Sonnet worker asks me directly instead.
 Everything runs in the background so you're never blocked. Short heads-up before
 each dispatch, short summary when results land.
 In a git repo, editing agents get their own worktree by default; outside git,
@@ -327,10 +385,12 @@ marked parallel with each other. Always printed for brainstorm.
 - Default = background dispatch. Heads-up first. Stay free for the user.
 - **Sonnet 5 is the default worker.** Obvious+simple → Sonnet-med/high directly. Unclear/risky → Sonnet scout → recommended worker.
 - Bugs, UI logic, unclear-but-bounded edits, QC → **Sonnet-high**. Reads/research/small UI → Sonnet-med.
-- **Opus only for advanced reasoning**: hard arch/design, ambiguous cross-system debugging, image analysis, or escalation after a Sonnet worker fails twice.
+- **Opus only for advanced reasoning**: hard arch/design, ambiguous cross-system debugging, image analysis, or escalation after a Sonnet worker fails twice — gated by the project's **Opus Usage** setting (`role-dependant`/`on-demand`/`never`).
+- **Opus Usage `never`** → no Opus workers at all; a stuck Sonnet worker asks the lead (report the specific blocker), the lead reasons through just that question, then re-briefs Sonnet.
 - Same instructions, different scope → parallelize by date/dir/module/file.
 - One writer per file. **In a git repo, every editor gets its own worktree by default** (check once per session); outside git, partition writes by file/directory instead.
 - **Before dispatching anything, check `git worktree list` for leftovers** from a prior/crashed session; flag any with uncommitted or unmerged work to the user instead of touching them.
+- **First run in a project (no `.claude/teamlead.md`)** → ask both Effort dial (xlow/low/medium/high/xhigh, medium Recommended) and Opus Usage (role-dependant/on-demand/never, role-dependant Recommended) before dispatching anything; save the answers so they're never asked again.
 - **First 2+ agent dispatch of the session (outside brainstorm)** → ask Sequential vs QC Prompting; reuse the answer after that.
 - **Brainstorm setup** → ask Normal / Extended / 2x mode alongside the worker model.
 - **PIPELINE/multi-wave dispatches and every brainstorm** → print a numbered stage plan (`Model@Effort: task` bullets per stage) before dispatching, so the parallel/sequential call is explicit.

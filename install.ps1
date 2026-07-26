@@ -13,5 +13,5 @@ $TeamleadDest = Join-Path $ClaudeDir "skills\teamlead"
 if (Test-Path $TeamleadDest) { Remove-Item -Recurse -Force $TeamleadDest }
 Copy-Item -Recurse -Force -Path (Join-Path $Src "skills\teamlead") -Destination (Join-Path $ClaudeDir "skills")
 
-Write-Host "✅ Installed teamlead skill + 3 worker agents into $ClaudeDir"
+Write-Host "✅ Installed teamlead skill + 6 worker agents into $ClaudeDir"
 Write-Host "   Restart Claude Code, then run /teamlead"

@@ -26,7 +26,7 @@ git clone https://github.com/Ritze03/claude-teamlead.git
 cd claude-teamlead
 ```
 
-Then run the installer for your OS — it copies the skill + 3 worker agents into your Claude config dir (`~/.claude`, or `%USERPROFILE%\.claude` on Windows; honors `CLAUDE_CONFIG_DIR`).
+Then run the installer for your OS — it copies the skill + 6 worker agents into your Claude config dir (`~/.claude`, or `%USERPROFILE%\.claude` on Windows; honors `CLAUDE_CONFIG_DIR`).
 
 **macOS / Linux**
 ```bash
@@ -55,6 +55,8 @@ Then run the installer for your OS — it copies the skill + 3 worker agents int
 | `/teamlead help` | Print the command + glyph reference. |
 | `/teamlead brainstorm <agents> <iterations> <topic>` | Multi-agent brainstorm. Numbers are **agents first, iterations second**; free text works. e.g. `/teamlead brainstorm 5 2 improve the auth flow` |
 | `/teamlead superdoc [path]` | Set up / audit / repair a project's docs system — a `superdoc/` folder by default, or `docs/`. Also fires on `/superdoc` or "init superdoc". |
+| `/teamlead effort <xlow\|low\|medium\|high\|xhigh>` | Bias this project's worker model/effort routing (persisted). No argument reports the current setting. |
+| `/teamlead opus <role-dependant\|on-demand\|never>` | Set this project's Opus policy for **workers** (persisted). The lead's own model is unaffected. No argument reports the current setting. |
 
 **Glyphs:** 🧭 orchestrating · 🧠 brainstorm · 📄 superdoc · ✅ activated · ❌ deactivated · 🚩 tripwire · ⚠️ needs your input.
 
@@ -64,11 +66,20 @@ Effort can't be set per-call in Claude Code — it comes from agent frontmatter 
 
 | worker | model · effort | used for |
 |---|---|---|
+| `tl-sonnet-low` | Sonnet 5 · Low | cheapest tier — trivial/mechanical: one-line edits, run-a-command-and-report, simple lookups |
 | `tl-sonnet-medium` | Sonnet 5 · Medium | reading, research, info-gathering, bounded scouting, small/UI edits |
 | `tl-sonnet-high` | Sonnet 5 · High | **the default workhorse** — non-trivial code from a plan, bug fixes, UI logic, unclear-but-bounded edits, default QC |
+| `tl-opus-low` | Opus 5 · Low | the cheapest Opus tier — a lightweight Opus-level judgment call, or the lightest rung of Opus escalation |
+| `tl-opus-medium` | Opus 5 · Medium | a lighter escalation step below `tl-opus-high`, or a first Opus try before paying for high effort |
 | `tl-opus-high` | Opus 5 · High | **advanced reasoning only** — hard architecture/design, ambiguous cross-system debugging, image analysis, and the escalation target when Sonnet fails twice |
 
 **Sonnet 5 is the default worker**; Opus is opt-in for advanced reasoning and the escalation ceiling — not the default whenever a path is merely "unclear." The lead routes automatically (unclear/risky → a Sonnet scout first, then the recommended worker; QC defaults to Sonnet, Opus only for high-stakes work). You can always override by naming a model/effort.
+
+Each project can also bias this routing with `/teamlead effort <xlow|low|medium|high|xhigh>` — `low`/`medium`/`high` shift the default worker a rung down/unchanged/up the ladder above, `xlow`/`xhigh` additionally hard-disable the High/Low tier outright.
+
+A separate `/teamlead opus <role-dependant|on-demand|never>` dial controls whether **worker** dispatch can reach Opus at all: `role-dependant` (default) matches the routing above; `on-demand` makes Opus fallback-only (never first-choice, only after a Sonnet worker actually fails); `never` removes Opus workers entirely — a stuck Sonnet worker asks the lead directly instead of escalating, and the lead reasons through just that one blocker before handing it back. This doesn't touch the lead's own model, only workers.
+
+Both settings are asked once via a prompt on a project's first `/teamlead` run, then persisted together in `.claude/teamlead.md`.
 
 ---
 
@@ -86,8 +97,11 @@ Effort can't be set per-call in Claude Code — it comes from agent frontmatter 
 ```
 agents/
   tl-opus-high.md          # Opus 5 · High worker (advanced reasoning / escalation)
+  tl-opus-medium.md        # Opus 5 · Medium worker (lighter escalation step)
+  tl-opus-low.md           # Opus 5 · Low worker (cheapest Opus tier)
   tl-sonnet-high.md        # Sonnet 5 · High worker (default workhorse)
   tl-sonnet-medium.md      # Sonnet 5 · Medium worker
+  tl-sonnet-low.md         # Sonnet 5 · Low worker (trivial/mechanical)
 skills/teamlead/
   SKILL.md                 # doctrine + inline modes (normal · brainstorm · superdoc)
   superdoc-playbook.md     # worker knowledge base for building docs

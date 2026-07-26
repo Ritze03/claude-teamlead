@@ -13,5 +13,5 @@ cp -R "$SRC/agents/." "$CLAUDE_DIR/agents/"
 rm -rf "$CLAUDE_DIR/skills/teamlead"
 cp -R "$SRC/skills/teamlead" "$CLAUDE_DIR/skills/"
 
-echo "✅ Installed teamlead skill + 3 worker agents into $CLAUDE_DIR"
+echo "✅ Installed teamlead skill + 6 worker agents into $CLAUDE_DIR"
 echo "   Restart Claude Code, then run /teamlead"
