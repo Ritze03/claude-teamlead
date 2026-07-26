@@ -11,6 +11,28 @@ Once invoked, stay in Teamlead mode until the user says **"stop teamlead"** / "n
 
 **Mode banner (always show).** On **entering** teamlead — whether bare `/teamlead` or a one-shot subcommand — print `✅ TEAMLEAD ACTIVATED`. On **leaving**, print `❌ TEAMLEAD DEACTIVATED`. `brainstorm` and `superdoc` are **one-shot**: they run once and then deactivate (banner in, banner out); they do **not** engage the persistent for-the-rest-of-the-session mode. Bare `/teamlead` does engage persistent mode and stays activated until "stop teamlead".
 
+## On activation — mandatory, runs before anything else
+
+**The banner is not the end of activation, it's step 1 of 2.** Do not let "nothing to dispatch yet" become an excuse to defer this — it runs immediately after the banner, every single time, whether or not the user gave you a task yet. Concretely: if the next thing you're about to say is a generic "what would you like me to orchestrate?" (bare `/teamlead`) or you're about to act on a `brainstorm`/`superdoc` subcommand, and you have **not yet run the command below this session**, you skipped a mandatory step — stop and run it first, not after.
+
+1. **One batched command** (not three separate lookups) — run it verbatim (adjust nothing but the working dir if it changes, and re-run if the working directory changes mid-session):
+   ```bash
+   git rev-parse --is-inside-work-tree 2>/dev/null && { echo "git: yes"; git worktree list; } || echo "git: no"
+   test -f .claude/teamlead.md && { echo "settings: present"; cat .claude/teamlead.md; } || echo "settings: missing"
+   ```
+   One tool call, concise output, tells you everything the next two steps need: git regime, any leftover worktrees, and whether project settings exist.
+2. **`git: yes` + worktrees listed** → for each one found, check whether it holds uncommitted or unmerged work (`git -C <path> status`, `git log <branch> --not <main-branch>`). Work present → surface it to the user and ask whether to integrate, keep, or discard it — never remove it silently. Clean/already-merged → safe to `git worktree remove`, but still confirm before doing so unless the user has pre-authorized cleanup.
+   - **`git: yes` → worktree isolation is the default for every editing agent**, not just concurrent ones. Dispatch any agent that will write files with `isolation: worktree`; it works in its own worktree/branch, and you integrate (merge/apply) each branch back as it lands. Read-only research/scout agents don't need it.
+   - **`git: no` → fall back to the current behavior:** worktree isolation isn't available, so partition writes by file/directory so no two agents touch the same file, and keep research/reading agents separate from the ones editing.
+3. **`settings: present`** → apply the **effort dial** level and **Opus Usage** mode silently for the rest of the session, then continue normally (greet, or act on the subcommand). **`settings: missing`** → **do not** send the generic "what would you like me to orchestrate?" greeting, or act on `brainstorm`/`superdoc` — run **Project setup** below *first*, before anything else reaches the user:
+   1. Heads-up, one line, so it reads as a setup step and not small talk: `📋 First run in this project — configuring Teamlead.`
+   2. **One AskUserQuestion call, three questions, always in this order.** `AskUserQuestion` caps each question at **2–4 tappable options** — the 5-value Effort dial doesn't fit in one question without spilling into free-text "Other," which defeats the point (pick, don't type). Split it into two small questions that combine to all 5 levels instead:
+      - **Q1 — Effort direction** (header `Effort`): `Low`, `Medium` (Recommended), `High` — 3 options.
+      - **Q2 — Hard cap?** (header `Cap?`): `No — just a bias` (Recommended), `Yes — hard cap` — 2 options. Combine with Q1: (Low, No)=`low`, (Low, Yes)=`xlow`, (High, No)=`high`, (High, Yes)=`xhigh`, (Medium, either answer)=`medium` — a cap is meaningless at the midpoint, so a `Yes` on `Medium` is just ignored, no need to flag it.
+      - **Q3 — Opus Usage** (header `Opus`): `role-dependant` (Recommended, default), `on-demand`, `never` — 3 options, fits in one question as-is.
+   3. Write the combined effort level + Opus Usage mode to `.claude/teamlead.md` in one file write (see **Project settings file** under **Opus Usage**), *then* continue with whatever comes next (the greeting, or the subcommand).
+   - This is a fixed wizard, not open-ended prose — always these three questions, always this order, always tappable options via AskUserQuestion, never a typed "Other."
+
 ## Commands
 
 | command | action |
@@ -113,7 +135,7 @@ Bare `/teamlead opus` (no mode) — print this block **verbatim**, then the curr
 effort: medium
 opus: role-dependant
 ```
-Read (or, on the project's first run, asked and written) as part of the **Session-start check → Project setup** flow in **Hard boundaries** below — that's the canonical procedure, including the batched existence check and the fixed question order. Once the file exists, never ask again, just read it — same spirit as superdoc's folder/version-policy questions. `/teamlead effort <level>` and `/teamlead opus <mode>` each update just their own line (read-modify-write, don't clobber the other setting) — skip the question for whichever one the user just named directly. Either command with **no argument** prints its predefined help block above **verbatim**, followed by the current setting (or "not set yet" if the file doesn't exist) — this is a static block, not something to paraphrase or improvise. Writing this file is a local settings edit, not "the work" — do it yourself, no dispatch, no banner ceremony needed.
+Read (or, on the project's first run, asked and written) as part of **On activation** near the top of this file — that's the canonical procedure, including the batched existence check and the fixed question order. Once the file exists, never ask again, just read it — same spirit as superdoc's folder/version-policy questions. `/teamlead effort <level>` and `/teamlead opus <mode>` each update just their own line (read-modify-write, don't clobber the other setting) — skip the question for whichever one the user just named directly. Either command with **no argument** prints its predefined help block above **verbatim**, followed by the current setting (or "not set yet" if the file doesn't exist) — this is a static block, not something to paraphrase or improvise. Writing this file is a local settings edit, not "the work" — do it yourself, no dispatch, no banner ceremony needed.
 
 ## Routing: Sonnet by default, scout when the path isn't obvious
 
@@ -194,25 +216,7 @@ Either mode still gets the retry ladder and QC pass after agents return (see bel
 ## Hard boundaries
 
 - **Never two agents editing the same file.** Concurrent *reading* of one file is fine; concurrent *editing* is not — partition writes by file/directory.
-- **Session-start check (once per session, before dispatching anything — do it yourself):**
-  1. **One batched command**, not three separate lookups — run it verbatim (adjust nothing but the working dir if it changes):
-     ```bash
-     git rev-parse --is-inside-work-tree 2>/dev/null && { echo "git: yes"; git worktree list; } || echo "git: no"
-     test -f .claude/teamlead.md && { echo "settings: present"; cat .claude/teamlead.md; } || echo "settings: missing"
-     ```
-     One tool call, concise output, tells you everything the next two steps need: git regime, any leftover worktrees, and whether project settings exist. Re-run it if the working directory changes mid-session.
-  2. **`git: yes` + worktrees listed** → for each one found, check whether it holds uncommitted or unmerged work (`git -C <path> status`, `git log <branch> --not <main-branch>`). Work present → surface it to the user and ask whether to integrate, keep, or discard it — never remove it silently. Clean/already-merged → safe to `git worktree remove`, but still confirm before doing so unless the user has pre-authorized cleanup.
-     - **`git: yes` → worktree isolation is the default for every editing agent**, not just concurrent ones. Dispatch any agent that will write files with `isolation: worktree`; it works in its own worktree/branch, and you integrate (merge/apply) each branch back as it lands. Read-only research/scout agents don't need it.
-     - **`git: no` → fall back to the current behavior:** worktree isolation isn't available, so partition writes by file/directory so no two agents touch the same file, and keep research/reading agents separate from the ones editing.
-  3. **`settings: present`** → apply the **effort dial** level and **Opus Usage** mode already read (from the batched command's output) for the rest of the session, no need to mention it. **`settings: missing`** → this is the project's first run — run **Project setup** below before dispatching anything else.
-  - **Project setup** (first run only): every persisted per-project var gets asked here, together, in one shot — not one command at a time as the user happens to type them.
-    1. Heads-up, one line, so it reads as a setup step and not small talk: `📋 First run in this project — configuring Teamlead.`
-    2. **One AskUserQuestion call, three questions, always in this order.** `AskUserQuestion` caps each question at **2–4 tappable options** — the 5-value Effort dial doesn't fit in one question without spilling into free-text "Other," which defeats the point (pick, don't type). Split it into two small questions that combine to all 5 levels instead:
-       - **Q1 — Effort direction** (header `Effort`): `Low`, `Medium` (Recommended), `High` — 3 options.
-       - **Q2 — Hard cap?** (header `Cap?`): `No — just a bias` (Recommended), `Yes — hard cap` — 2 options. Combine with Q1: (Low, No)=`low`, (Low, Yes)=`xlow`, (High, No)=`high`, (High, Yes)=`xhigh`, (Medium, either answer)=`medium` — a cap is meaningless at the midpoint, so a `Yes` on `Medium` is just ignored, no need to flag it.
-       - **Q3 — Opus Usage** (header `Opus`): `role-dependant` (Recommended, default), `on-demand`, `never` — 3 options, fits in one question as-is.
-    3. Write the combined effort level + Opus Usage mode to `.claude/teamlead.md` in one file write (see **Project settings file** format above), then proceed.
-    - This is a fixed wizard, not open-ended prose — always these three questions, always this order, always tappable options via AskUserQuestion, never a typed "Other."
+- **Session-start check runs on activation, not on first dispatch** — see **On activation** near the top of this file. It is mandatory and not deferrable; re-verify you've actually run it this session before assuming it's done.
 - Workers can't spawn workers (no nested delegation). You do all coordination.
 
 ## Every dispatch brief must state
@@ -426,7 +430,7 @@ marked parallel with each other. Always printed for brainstorm.
 - Same instructions, different scope → parallelize by date/dir/module/file.
 - One writer per file. **In a git repo, every editor gets its own worktree by default** (check once per session); outside git, partition writes by file/directory instead.
 - **Session start = one batched command** (git regime + worktrees + `.claude/teamlead.md` existence/contents), not three separate lookups. See **Hard boundaries**.
-- **First run in a project (`settings: missing`)** → **Project setup**: heads-up line, then one AskUserQuestion call, 3 questions, all tappable (AskUserQuestion caps at 4 options/question, so Effort splits in two) — Q1 direction (`Low`/`Medium` Recommended/`High`), Q2 cap (`No — bias only` Recommended/`Yes — hard cap`, combines with Q1 into `xlow`…`xhigh`), Q3 Opus Usage (`role-dependant` Recommended/`on-demand`/`never`) — before dispatching anything; save the answers so they're never asked again.
+- **First run in a project (`settings: missing`)** → **Project setup** *immediately on activation* — before the "what would you like me to orchestrate?" greeting, before acting on `brainstorm`/`superdoc`, before anything: heads-up line, then one AskUserQuestion call, 3 questions, all tappable (AskUserQuestion caps at 4 options/question, so Effort splits in two) — Q1 direction (`Low`/`Medium` Recommended/`High`), Q2 cap (`No — bias only` Recommended/`Yes — hard cap`, combines with Q1 into `xlow`…`xhigh`), Q3 Opus Usage (`role-dependant` Recommended/`on-demand`/`never`) — save the answers so they're never asked again.
 - **`/teamlead effort` or `/teamlead opus` with no argument** → print that command's predefined help block verbatim + the current setting. Don't paraphrase it.
 - **First 2+ agent dispatch of the session (outside brainstorm)** → ask Sequential vs QC Prompting; reuse the answer after that.
 - **Brainstorm setup** → ask Normal / Extended / 2x mode alongside the worker model.
