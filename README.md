@@ -15,7 +15,7 @@ Ships three things in one skill:
 ## Requirements
 
 - **Claude Code** (CLI, desktop, or IDE extension).
-- Models: the workers pin **Opus 4.8** and **Sonnet 5** (by exact model ID) at specific reasoning-effort levels via agent frontmatter, so you need access to both. Sonnet 5 is the default; Opus is reserved for advanced reasoning and escalation.
+- Models: the workers pin **Opus 5** and **Sonnet 5** (by exact model ID) at specific reasoning-effort levels via agent frontmatter, so you need access to both. Sonnet 5 is the default; Opus is reserved for advanced reasoning and escalation.
 
 ---
 
@@ -66,7 +66,7 @@ Effort can't be set per-call in Claude Code — it comes from agent frontmatter 
 |---|---|---|
 | `tl-sonnet-medium` | Sonnet 5 · Medium | reading, research, info-gathering, bounded scouting, small/UI edits |
 | `tl-sonnet-high` | Sonnet 5 · High | **the default workhorse** — non-trivial code from a plan, bug fixes, UI logic, unclear-but-bounded edits, default QC |
-| `tl-opus-high` | Opus 4.8 · High | **advanced reasoning only** — hard architecture/design, ambiguous cross-system debugging, image analysis, and the escalation target when Sonnet fails twice |
+| `tl-opus-high` | Opus 5 · High | **advanced reasoning only** — hard architecture/design, ambiguous cross-system debugging, image analysis, and the escalation target when Sonnet fails twice |
 
 **Sonnet 5 is the default worker**; Opus is opt-in for advanced reasoning and the escalation ceiling — not the default whenever a path is merely "unclear." The lead routes automatically (unclear/risky → a Sonnet scout first, then the recommended worker; QC defaults to Sonnet, Opus only for high-stakes work). You can always override by naming a model/effort.
 
@@ -85,7 +85,7 @@ Effort can't be set per-call in Claude Code — it comes from agent frontmatter 
 
 ```
 agents/
-  tl-opus-high.md          # Opus 4.8 · High worker (advanced reasoning / escalation)
+  tl-opus-high.md          # Opus 5 · High worker (advanced reasoning / escalation)
   tl-sonnet-high.md        # Sonnet 5 · High worker (default workhorse)
   tl-sonnet-medium.md      # Sonnet 5 · Medium worker
 skills/teamlead/

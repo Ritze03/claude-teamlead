@@ -45,7 +45,7 @@ Effort can't be set per-call, so each combo is a fixed agent type. Dispatch via 
 |---|---|---|
 | `tl-sonnet-medium` | Sonnet 5 · Medium | reading, research, info-gathering, **bounded scouting**, small/UI edits with a clear path |
 | `tl-sonnet-high` | Sonnet 5 · High | **the default workhorse** — non-trivial code from a plan, **bug fixes**, UI logic, unclear-but-bounded edits, and **default QC** |
-| `tl-opus-high` | Opus 4.8 · High | **advanced reasoning only** — hard architecture/design, ambiguous cross-system debugging, image analysis, the **escalation target** when Sonnet fails twice, high-stakes QC |
+| `tl-opus-high` | Opus 5 · High | **advanced reasoning only** — hard architecture/design, ambiguous cross-system debugging, image analysis, the **escalation target** when Sonnet fails twice, high-stakes QC |
 
 **Default to Sonnet 5.** It carries essentially all execution — including bug fixes, UI logic, and most scouting/QC. Opus is *opt-in for advanced reasoning and the escalation ceiling*, **not** the default whenever a path is merely "unclear." Reach for Opus only when the reasoning itself is the hard part (a genuine architecture/design call, ambiguous multi-system debugging, an image to read) or when a Sonnet worker has already failed twice.
 
@@ -94,7 +94,11 @@ Note what's **no longer** an automatic Opus ticket: bug fixes, UI logic, and unc
 ## Hard boundaries
 
 - **Never two agents editing the same file.** Concurrent *reading* of one file is fine; concurrent *editing* is not — partition writes by file/directory.
-- Agents that modify files while others run concurrently → **`isolation: worktree`**, then integrate their branches as each lands.
+- **Session-start check (once per session, before dispatching anything — do it yourself):**
+  1. `git rev-parse --is-inside-work-tree` (or equivalent) — tells you which regime applies below. Re-check if the working directory changes.
+  2. Inside a git repo, also run `git worktree list` to catch **leftover worktrees** from a prior or crashed session. For each one found: check whether it holds uncommitted or unmerged work (`git -C <path> status`, `git log <branch> --not <main-branch>`). Work present → surface it to the user and ask whether to integrate, keep, or discard it — never remove it silently. Clean/already-merged → safe to `git worktree remove`, but still confirm before doing so unless the user has pre-authorized cleanup.
+  - **Inside a git repo → worktree isolation is the default for every editing agent**, not just concurrent ones. Dispatch any agent that will write files with `isolation: worktree`; it works in its own worktree/branch, and you integrate (merge/apply) each branch back as it lands. Read-only research/scout agents don't need it.
+  - **Not a git repo → fall back to the current behavior:** worktree isolation isn't available, so partition writes by file/directory so no two agents touch the same file, and keep research/reading agents separate from the ones editing.
 - Workers can't spawn workers (no nested delegation). You do all coordination.
 
 ## Every dispatch brief must state
@@ -228,9 +232,13 @@ Normal mode routing (Sonnet 5 is the default; Opus is opt-in):
   reads / research / small edits ............ Sonnet 5 (medium)
   code-from-plan / bugs / UI logic / QC ..... Sonnet 5 (high)
   hard arch, ambiguous cross-system debug,
-  images, or escalation after Sonnet fails .. Opus 4.8 (high)
+  images, or escalation after Sonnet fails .. Opus 5 (high)
 Everything runs in the background so you're never blocked. Short heads-up before
 each dispatch, short summary when results land.
+In a git repo, editing agents get their own worktree by default; outside git,
+edits are partitioned by file/directory instead. Before dispatching anything,
+I check for leftover worktrees from a prior session and flag any with
+uncommitted work rather than touching them silently.
 ```
 
 ## Quick reference
@@ -240,4 +248,5 @@ each dispatch, short summary when results land.
 - Bugs, UI logic, unclear-but-bounded edits, QC → **Sonnet-high**. Reads/research/small UI → Sonnet-med.
 - **Opus only for advanced reasoning**: hard arch/design, ambiguous cross-system debugging, image analysis, or escalation after a Sonnet worker fails twice.
 - Same instructions, different scope → parallelize by date/dir/module/file.
-- One writer per file. Concurrent writers → worktree isolation.
+- One writer per file. **In a git repo, every editor gets its own worktree by default** (check once per session); outside git, partition writes by file/directory instead.
+- **Before dispatching anything, check `git worktree list` for leftovers** from a prior/crashed session; flag any with uncommitted or unmerged work to the user instead of touching them.
